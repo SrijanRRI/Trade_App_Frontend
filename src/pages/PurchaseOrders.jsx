@@ -8,8 +8,15 @@ import Input from "../components/Input";
 import TableWrap from "../components/TableWrap";
 import { purchaseOrderApi } from "../api/api";
 import { currency, formatDate } from "../utils/format";
+import { useAuth } from "../context/AuthContext";
 
 export default function PurchaseOrders() {
+
+  const { hasPermission } = useAuth();
+
+  const canCreatePurchase = hasPermission("purchase.create");
+  const canViewPurchase = hasPermission("purchase.view");
+
   const [data, setData] = useState([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -36,6 +43,11 @@ export default function PurchaseOrders() {
   }, []);
 
   const seedDummy = async () => {
+    if (!canCreatePurchase) {
+      setMessage("You do not have permission to create or seed purchase orders.");
+      return;
+    }
+
     setMessage("");
     try {
       const res = await purchaseOrderApi.seedDummy();
@@ -63,7 +75,7 @@ export default function PurchaseOrders() {
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        {/* <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={seedDummy}>
             <RefreshCw size={16} className="mr-2" />
             Seed Dummy PO
@@ -75,6 +87,39 @@ export default function PurchaseOrders() {
               Create PO
             </Button>
           </Link>
+        </div> */}
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            onClick={seedDummy}
+            disabled={!canCreatePurchase}
+            title={
+              canCreatePurchase
+                ? "Seed dummy purchase orders"
+                : "You do not have permission to create purchase orders"
+            }
+          >
+            <RefreshCw size={16} className="mr-2" />
+            Seed Dummy PO
+          </Button>
+
+          {canCreatePurchase ? (
+            <Link to="/purchase-orders/create">
+              <Button>
+                <Plus size={16} className="mr-2" />
+                Create PO
+              </Button>
+            </Link>
+          ) : (
+            <Button
+              disabled
+              title="You do not have permission to create purchase orders"
+            >
+              <Plus size={16} className="mr-2" />
+              Create PO
+            </Button>
+          )}
         </div>
       </div>
 
@@ -156,9 +201,24 @@ export default function PurchaseOrders() {
                   <td className="px-4 py-3"><Badge value={po.inventoryStatus} /></td>
                   <td className="px-4 py-3"><Badge value={po.tallyStatus} /></td>
                   <td className="px-4 py-3 text-right">
-                    <Link to={`/purchase-orders/${po._id}`}>
+                    {/* <Link to={`/purchase-orders/${po._id}`}>
                       <Button size="sm" variant="outline">View</Button>
-                    </Link>
+                    </Link> */}
+
+                    {canViewPurchase ? (
+                      <Link to={`/purchase-orders/${po._id}`}>
+                        <Button size="sm" variant="outline">View</Button>
+                      </Link>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled
+                        title="You do not have permission to view purchase order details"
+                      >
+                        View
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))

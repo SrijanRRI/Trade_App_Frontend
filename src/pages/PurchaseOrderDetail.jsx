@@ -9,10 +9,17 @@ import Modal from "../components/Modal";
 import TableWrap from "../components/TableWrap";
 import { purchaseOrderApi, tallyApi } from "../api/api";
 import { currency, formatDate } from "../utils/format";
+import { useAuth } from "../context/AuthContext";
 
 export default function PurchaseOrderDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  const { hasPermission } = useAuth();
+
+  const canAcceptPurchase = hasPermission("purchase.accept");
+  const canRejectPurchase = hasPermission("purchase.reject");
+  const canSyncPurchaseTally = hasPermission("tally.purchase_sync");
 
   const [po, setPo] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -65,11 +72,33 @@ export default function PurchaseOrderDetail() {
     }
   };
 
+  // const acceptAll = () => {
+  //   runAction(() => purchaseOrderApi.accept(id), "PO accepted and inventory created.");
+  // };
+
   const acceptAll = () => {
+    if (!canAcceptPurchase) {
+      setMessage("You do not have permission to accept purchase orders.");
+      return;
+    }
+
     runAction(() => purchaseOrderApi.accept(id), "PO accepted and inventory created.");
   };
 
+  // const rejectAll = () => {
+  //   const reason = window.prompt("Enter rejection reason");
+
+  //   if (!reason) return;
+
+  //   runAction(() => purchaseOrderApi.reject(id, reason), "PO rejected.");
+  // };
+
   const rejectAll = () => {
+    if (!canRejectPurchase) {
+      setMessage("You do not have permission to reject purchase orders.");
+      return;
+    }
+
     const reason = window.prompt("Enter rejection reason");
 
     if (!reason) return;
@@ -77,11 +106,33 @@ export default function PurchaseOrderDetail() {
     runAction(() => purchaseOrderApi.reject(id, reason), "PO rejected.");
   };
 
+  // const syncTally = () => {
+  //   runAction(() => tallyApi.syncPurchaseDummy(id), "Dummy purchase voucher synced.");
+  // };
+
   const syncTally = () => {
+    if (!canSyncPurchaseTally) {
+      setMessage("You do not have permission to update purchase voucher in Tally.");
+      return;
+    }
+
     runAction(() => tallyApi.syncPurchaseDummy(id), "Dummy purchase voucher synced.");
   };
 
+  // const submitPartial = () => {
+  //   runAction(
+  //     () => purchaseOrderApi.partialAccept(id, partialItems),
+  //     "PO partially accepted and inventory created."
+  //   );
+  //   setPartialOpen(false);
+  // };
+
   const submitPartial = () => {
+    if (!canAcceptPurchase) {
+      setMessage("You do not have permission to partially accept purchase orders.");
+      return;
+    }
+
     runAction(
       () => purchaseOrderApi.partialAccept(id, partialItems),
       "PO partially accepted and inventory created."
@@ -102,7 +153,7 @@ export default function PurchaseOrderDetail() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-center">
+      <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-start">
         <div className="flex items-start gap-3">
           <Button
             variant="outline"
@@ -124,22 +175,67 @@ export default function PurchaseOrderDetail() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button variant="success" onClick={acceptAll} disabled={actionLoading}>
-            Accept All
-          </Button>
+        <div className="flex flex-col items-start gap-2 xl:items-end">
+          <div className="flex flex-wrap gap-2 xl:justify-end">
+            <Button
+              variant="success"
+              onClick={acceptAll}
+              disabled={actionLoading || !canAcceptPurchase}
+              title={
+                canAcceptPurchase
+                  ? "Accept all PO items"
+                  : "You do not have permission to accept purchase orders"
+              }
+            >
+              Accept All
+            </Button>
 
-          <Button variant="warning" onClick={() => setPartialOpen(true)} disabled={actionLoading}>
-            Partial Accept
-          </Button>
+            <Button
+              variant="warning"
+              onClick={() => setPartialOpen(true)}
+              disabled={actionLoading || !canAcceptPurchase}
+              title={
+                canAcceptPurchase
+                  ? "Partially accept PO items"
+                  : "You do not have permission to partially accept purchase orders"
+              }
+            >
+              Partial Accept
+            </Button>
 
-          <Button variant="danger" onClick={rejectAll} disabled={actionLoading}>
-            Reject
-          </Button>
+            <Button
+              variant="danger"
+              onClick={rejectAll}
+              disabled={actionLoading || !canRejectPurchase}
+              title={
+                canRejectPurchase
+                  ? "Reject purchase order"
+                  : "You do not have permission to reject purchase orders"
+              }
+            >
+              Reject
+            </Button>
 
-          <Button onClick={syncTally} disabled={!canTallySync || actionLoading}>
-            Update in Tally
-          </Button>
+            <Button
+              onClick={syncTally}
+              disabled={!canTallySync || actionLoading || !canSyncPurchaseTally}
+              title={
+                !canSyncPurchaseTally
+                  ? "You do not have permission to update purchase voucher in Tally"
+                  : !canTallySync
+                    ? "PO must be moved to inventory before Tally update, or it is already synced"
+                    : "Update purchase voucher in dummy Tally"
+              }
+            >
+              Update in Tally
+            </Button>
+          </div>
+
+          {!canAcceptPurchase || !canRejectPurchase || !canSyncPurchaseTally ? (
+            <p className="max-w-md text-left text-xs text-slate-500 xl:text-right">
+              Some actions are disabled because your role does not have permission.
+            </p>
+          ) : null}
         </div>
       </div>
 

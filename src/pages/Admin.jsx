@@ -4,6 +4,7 @@ import Card from "../components/Card";
 import Input from "../components/Input";
 import TableWrap from "../components/TableWrap";
 import { roleApi, userApi } from "../api/api";
+import { useAuth } from "../context/AuthContext";
 
 const permissionGroups = [
   {
@@ -263,6 +264,34 @@ export default function Admin() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
 
+  const { hasPermission } = useAuth();
+
+  const canViewUsers = hasPermission("user.view");
+  const canCreateUsers = hasPermission("user.create");
+  const canViewRoles = hasPermission("role.view");
+  const canCreateRoles = hasPermission("role.create");
+
+  const canUseAdminPage =
+    canViewUsers || canCreateUsers || canViewRoles || canCreateRoles;
+
+  const showCreateRoleSection = canCreateRoles;
+  const showCreateUserSection = canCreateUsers && canViewRoles;
+  const showRolesTable = canViewRoles;
+  const showUsersTable = canViewUsers;
+
+  const hasCreateSections = showCreateRoleSection || showCreateUserSection;
+  const hasTableSections = showRolesTable || showUsersTable;
+
+  const createGridClass =
+    showCreateRoleSection && showCreateUserSection
+      ? "grid gap-5 xl:grid-cols-[1.25fr_0.75fr]"
+      : "grid gap-5";
+
+  const tableGridClass =
+    showRolesTable && showUsersTable
+      ? "grid gap-5 xl:grid-cols-2"
+      : "grid gap-5";
+
   const [roleForm, setRoleForm] = useState({
     name: "",
     key: "",
@@ -282,14 +311,28 @@ export default function Admin() {
     return new Set(roleForm.permissions);
   }, [roleForm.permissions]);
 
+  const fullAccessSelected = roleForm.permissions.includes("*");
+
   const load = async () => {
     setLoading(true);
+    setMessage("");
 
     try {
-      const [roleRes, userRes] = await Promise.all([
-        roleApi.list(),
-        userApi.list()
-      ]);
+      const requests = [];
+
+      if (canViewRoles) {
+        requests.push(roleApi.list());
+      } else {
+        requests.push(Promise.resolve({ roles: [] }));
+      }
+
+      if (canViewUsers) {
+        requests.push(userApi.list());
+      } else {
+        requests.push(Promise.resolve({ users: [] }));
+      }
+
+      const [roleRes, userRes] = await Promise.all(requests);
 
       setRoles(roleRes.roles || []);
       setUsers(userRes.users || []);
@@ -302,7 +345,7 @@ export default function Admin() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [canViewRoles, canViewUsers]);
 
   const updateRoleName = (value) => {
     setRoleForm((prev) => ({
@@ -327,13 +370,14 @@ export default function Admin() {
 
   const togglePermission = (permissionId) => {
     setRoleForm((prev) => {
-      const exists = prev.permissions.includes(permissionId);
+      const withoutFullAccess = prev.permissions.filter((item) => item !== "*");
+      const exists = withoutFullAccess.includes(permissionId);
 
       return {
         ...prev,
         permissions: exists
-          ? prev.permissions.filter((item) => item !== permissionId)
-          : [...prev.permissions, permissionId]
+          ? withoutFullAccess.filter((item) => item !== permissionId)
+          : [...withoutFullAccess, permissionId]
       };
     });
   };
@@ -345,10 +389,12 @@ export default function Admin() {
     );
 
     setRoleForm((prev) => {
+      const withoutFullAccess = prev.permissions.filter((permission) => permission !== "*");
+
       if (allSelected) {
         return {
           ...prev,
-          permissions: prev.permissions.filter(
+          permissions: withoutFullAccess.filter(
             (permission) => !groupPermissionIds.includes(permission)
           )
         };
@@ -357,7 +403,7 @@ export default function Admin() {
       return {
         ...prev,
         permissions: Array.from(
-          new Set([...prev.permissions, ...groupPermissionIds])
+          new Set([...withoutFullAccess, ...groupPermissionIds])
         )
       };
     });
@@ -463,376 +509,435 @@ export default function Admin() {
         <Card className="text-sm text-slate-700">{message}</Card>
       ) : null}
 
-      <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-        <Card>
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold text-slate-900">Create Role</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Select a preset or choose permissions manually.
-            </p>
-          </div>
+      {!canUseAdminPage ? (
+        <Card className="border-amber-200 bg-amber-50 text-sm text-amber-800">
+          <p className="font-semibold">Access Restricted</p>
+          <p className="mt-1">
+            You do not have permission to manage users or roles.
+          </p>
+        </Card>
+      ) : null}
 
-          <form onSubmit={createRole} className="space-y-5">
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="block md:col-span-2">
-                <span className="mb-1.5 block text-sm font-medium text-slate-700">
-                  Role Preset
-                </span>
-                <select
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-                  value=""
-                  onChange={(e) => applyPreset(e.target.value)}
-                >
-                  <option value="">Choose ready-made role template</option>
-                  {rolePresets.map((preset) => (
-                    <option key={preset.key} value={preset.key}>
-                      {preset.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+      {canUseAdminPage ? (
+        <>
+          {hasCreateSections ? (
+            <div className={createGridClass}>
+              {showCreateRoleSection ? (
+                <Card>
+                  <div className="mb-4">
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      Create Role
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Select a preset or choose permissions manually.
+                    </p>
+                  </div>
 
-              <Input
-                label="Role Name"
-                placeholder="Purchase Manager"
-                value={roleForm.name}
-                onChange={(e) => updateRoleName(e.target.value)}
-                required
-              />
+                  <form onSubmit={createRole} className="space-y-5">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="block md:col-span-2">
+                        <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                          Role Preset
+                        </span>
+                        <select
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                          value=""
+                          onChange={(e) => applyPreset(e.target.value)}
+                        >
+                          <option value="">Choose ready-made role template</option>
+                          {rolePresets.map((preset) => (
+                            <option key={preset.key} value={preset.key}>
+                              {preset.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
 
-              <Input
-                label="Role Key"
-                placeholder="purchase_manager"
-                value={roleForm.key}
-                onChange={(e) =>
-                  setRoleForm((prev) => ({
-                    ...prev,
-                    key: makeRoleKey(e.target.value)
-                  }))
-                }
-                required
-              />
+                      <Input
+                        label="Role Name"
+                        placeholder="Purchase Manager"
+                        value={roleForm.name}
+                        onChange={(e) => updateRoleName(e.target.value)}
+                        required
+                      />
 
-              <div className="md:col-span-2">
-                <Input
-                  label="Role Description"
-                  placeholder="Can manage purchase order review and approval"
-                  value={roleForm.description}
-                  onChange={(e) =>
-                    setRoleForm((prev) => ({
-                      ...prev,
-                      description: e.target.value
-                    }))
-                  }
-                />
-              </div>
-            </div>
+                      <Input
+                        label="Role Key"
+                        placeholder="purchase_manager"
+                        value={roleForm.key}
+                        onChange={(e) =>
+                          setRoleForm((prev) => ({
+                            ...prev,
+                            key: makeRoleKey(e.target.value)
+                          }))
+                        }
+                        required
+                      />
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                <div>
-                  <h3 className="font-semibold text-slate-900">
-                    Permissions
-                  </h3>
-                  <p className="text-sm text-slate-500">
-                    Selected {roleForm.permissions.length} of {allPermissions.length} permissions.
-                  </p>
-                </div>
+                      <div className="md:col-span-2">
+                        <Input
+                          label="Role Description"
+                          placeholder="Can manage purchase order review and approval"
+                          value={roleForm.description}
+                          onChange={(e) =>
+                            setRoleForm((prev) => ({
+                              ...prev,
+                              description: e.target.value
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
 
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" variant="secondary" onClick={selectAllPermissions}>
-                    Select All
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={clearPermissions}>
-                    Clear
-                  </Button>
-                </div>
-              </div>
-
-              <div className="mt-4 space-y-4">
-                {permissionGroups.map((group) => {
-                  const groupPermissionIds = group.permissions.map(
-                    (permission) => permission.id
-                  );
-                  const allSelected = groupPermissionIds.every((id) =>
-                    selectedPermissionSet.has(id)
-                  );
-                  const selectedCount = groupPermissionIds.filter((id) =>
-                    selectedPermissionSet.has(id)
-                  ).length;
-
-                  return (
-                    <div
-                      key={group.title}
-                      className="rounded-2xl border border-slate-200 bg-white p-4"
-                    >
-                      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                         <div>
-                          <h4 className="font-semibold text-slate-900">
-                            {group.title}
-                          </h4>
-                          <p className="mt-1 text-sm text-slate-500">
-                            {group.description}
-                          </p>
-                          <p className="mt-1 text-xs font-medium text-blue-600">
-                            {selectedCount}/{group.permissions.length} selected
+                          <h3 className="font-semibold text-slate-900">
+                            Permissions
+                          </h3>
+                          <p className="text-sm text-slate-500">
+                            {fullAccessSelected
+                              ? "Full System Access selected."
+                              : `Selected ${roleForm.permissions.length} of ${allPermissions.length} permissions.`}
                           </p>
                         </div>
 
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={allSelected ? "secondary" : "outline"}
-                          onClick={() => toggleGroup(group)}
-                        >
-                          {allSelected ? "Remove Group" : "Select Group"}
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={selectAllPermissions}
+                          >
+                            Select All
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={clearPermissions}
+                          >
+                            Clear
+                          </Button>
+                        </div>
                       </div>
 
-                      <div className="mt-4 grid gap-3 md:grid-cols-2">
-                        {group.permissions.map((permission) => {
-                          const checked = selectedPermissionSet.has(permission.id);
+                      {fullAccessSelected ? (
+                        <div className="mt-4 rounded-2xl border border-purple-200 bg-purple-50 p-4">
+                          <p className="text-sm font-semibold text-purple-800">
+                            Full System Access
+                          </p>
+                          <p className="mt-1 text-sm text-purple-700">
+                            Can access all modules and perform all actions.
+                          </p>
+                        </div>
+                      ) : null}
+
+                      <div className="mt-4 space-y-4">
+                        {permissionGroups.map((group) => {
+                          const groupPermissionIds = group.permissions.map(
+                            (permission) => permission.id
+                          );
+                          const allSelected = groupPermissionIds.every((id) =>
+                            selectedPermissionSet.has(id)
+                          );
+                          const selectedCount = groupPermissionIds.filter((id) =>
+                            selectedPermissionSet.has(id)
+                          ).length;
 
                           return (
-                            <label
-                              key={permission.id}
-                              className={[
-                                "flex cursor-pointer gap-3 rounded-xl border p-3 transition",
-                                checked
-                                  ? "border-blue-300 bg-blue-50"
-                                  : "border-slate-200 bg-white hover:bg-slate-50"
-                              ].join(" ")}
+                            <div
+                              key={group.title}
+                              className="rounded-2xl border border-slate-200 bg-white p-4"
                             >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => togglePermission(permission.id)}
-                                className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                              />
+                              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                                <div>
+                                  <h4 className="font-semibold text-slate-900">
+                                    {group.title}
+                                  </h4>
+                                  <p className="mt-1 text-sm text-slate-500">
+                                    {group.description}
+                                  </p>
+                                  <p className="mt-1 text-xs font-medium text-blue-600">
+                                    {selectedCount}/{group.permissions.length} selected
+                                  </p>
+                                </div>
 
-                              <span>
-                                <span className="block text-sm font-semibold text-slate-900">
-                                  {permission.label}
-                                </span>
-                                <span className="mt-0.5 block text-xs font-medium text-slate-500">
-                                  ID: {permission.id}
-                                </span>
-                                <span className="mt-1 block text-xs text-slate-500">
-                                  {permission.description}
-                                </span>
-                              </span>
-                            </label>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={allSelected ? "secondary" : "outline"}
+                                  onClick={() => toggleGroup(group)}
+                                >
+                                  {allSelected ? "Remove Group" : "Select Group"}
+                                </Button>
+                              </div>
+
+                              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                {group.permissions.map((permission) => {
+                                  const checked = selectedPermissionSet.has(permission.id);
+
+                                  return (
+                                    <label
+                                      key={permission.id}
+                                      className={[
+                                        "flex cursor-pointer gap-3 rounded-xl border p-3 transition",
+                                        checked
+                                          ? "border-blue-300 bg-blue-50"
+                                          : "border-slate-200 bg-white hover:bg-slate-50"
+                                      ].join(" ")}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => togglePermission(permission.id)}
+                                        className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                      />
+
+                                      <span>
+                                        <span className="block text-sm font-semibold text-slate-900">
+                                          {permission.label}
+                                        </span>
+                                        <span className="mt-0.5 block text-xs font-medium text-slate-500">
+                                          ID: {permission.id}
+                                        </span>
+                                        <span className="mt-1 block text-xs text-slate-500">
+                                          {permission.description}
+                                        </span>
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           );
                         })}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+
+                    <Button type="submit">Create Role</Button>
+                  </form>
+                </Card>
+              ) : null}
+
+              {showCreateUserSection ? (
+                <Card>
+                  <div className="mb-4">
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      Create User
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Select a role for the user. Permissions come from the selected role.
+                    </p>
+                  </div>
+
+                  <form onSubmit={createUser} className="space-y-4">
+                    <Input
+                      label="Name"
+                      value={userForm.name}
+                      onChange={(e) =>
+                        setUserForm((prev) => ({ ...prev, name: e.target.value }))
+                      }
+                      required
+                    />
+
+                    <Input
+                      label="Email"
+                      type="email"
+                      value={userForm.email}
+                      onChange={(e) =>
+                        setUserForm((prev) => ({ ...prev, email: e.target.value }))
+                      }
+                      required
+                    />
+
+                    <Input
+                      label="Password"
+                      value={userForm.password}
+                      onChange={(e) =>
+                        setUserForm((prev) => ({ ...prev, password: e.target.value }))
+                      }
+                      required
+                    />
+
+                    <Input
+                      label="Phone"
+                      value={userForm.phone}
+                      onChange={(e) =>
+                        setUserForm((prev) => ({ ...prev, phone: e.target.value }))
+                      }
+                    />
+
+                    <label className="block">
+                      <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                        Assign Role
+                      </span>
+                      <select
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                        value={userForm.roleId}
+                        onChange={(e) =>
+                          setUserForm((prev) => ({ ...prev, roleId: e.target.value }))
+                        }
+                        required
+                      >
+                        <option value="">Select Role</option>
+                        {roles.map((role) => (
+                          <option key={role._id} value={role._id}>
+                            {role.name} -{" "}
+                            {role.permissions?.includes("*")
+                              ? "Full System Access"
+                              : `${role.permissions?.length || 0} permissions`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <Button type="submit">Create User</Button>
+                  </form>
+                </Card>
+              ) : null}
             </div>
+          ) : null}
 
-            <Button type="submit">Create Role</Button>
-          </form>
-        </Card>
+          {hasTableSections ? (
+            <div className={tableGridClass}>
+              {showRolesTable ? (
+                <Card>
+                  <h2 className="mb-4 text-lg font-semibold text-slate-900">
+                    Roles
+                  </h2>
 
-        <Card>
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold text-slate-900">Create User</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Select a role for the user. Permissions come from the selected role.
-            </p>
-          </div>
+                  <TableWrap>
+                    <table className="min-w-[750px] w-full text-left text-sm">
+                      <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3">Name</th>
+                          <th className="px-4 py-3">Key</th>
+                          <th className="px-4 py-3">Permissions</th>
+                        </tr>
+                      </thead>
 
-          <form onSubmit={createUser} className="space-y-4">
-            <Input
-              label="Name"
-              value={userForm.name}
-              onChange={(e) =>
-                setUserForm((prev) => ({ ...prev, name: e.target.value }))
-              }
-              required
-            />
+                      <tbody className="divide-y divide-slate-100">
+                        {loading ? (
+                          <tr>
+                            <td className="px-4 py-6" colSpan="3">
+                              Loading...
+                            </td>
+                          </tr>
+                        ) : roles.length === 0 ? (
+                          <tr>
+                            <td className="px-4 py-6" colSpan="3">
+                              No roles found.
+                            </td>
+                          </tr>
+                        ) : (
+                          roles.map((role) => (
+                            <tr key={role._id}>
+                              <td className="px-4 py-3">
+                                <p className="font-semibold text-slate-900">
+                                  {role.name}
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  {role.description || "-"}
+                                </p>
+                              </td>
+                              <td className="px-4 py-3">{role.key}</td>
+                              <td className="px-4 py-3">
+                                <div className="flex max-w-md flex-wrap gap-1.5">
+                                  {role.permissions?.includes("*") ? (
+                                    <div className="rounded-xl bg-purple-50 px-3 py-2 text-xs ring-1 ring-purple-200">
+                                      <p className="font-semibold text-purple-700">
+                                        Full System Access
+                                      </p>
+                                      <p className="mt-0.5 text-purple-600">
+                                        Can access all modules and perform all actions.
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      {(role.permissions || [])
+                                        .slice(0, 5)
+                                        .map((permission) => (
+                                          <span
+                                            key={permission}
+                                            title={getPermissionDescription(permission)}
+                                            className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700"
+                                          >
+                                            {getPermissionLabel(permission)}
+                                          </span>
+                                        ))}
 
-            <Input
-              label="Email"
-              type="email"
-              value={userForm.email}
-              onChange={(e) =>
-                setUserForm((prev) => ({ ...prev, email: e.target.value }))
-              }
-              required
-            />
+                                      {(role.permissions || []).length > 5 ? (
+                                        <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
+                                          +{role.permissions.length - 5} more
+                                        </span>
+                                      ) : null}
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </TableWrap>
+                </Card>
+              ) : null}
 
-            <Input
-              label="Password"
-              value={userForm.password}
-              onChange={(e) =>
-                setUserForm((prev) => ({ ...prev, password: e.target.value }))
-              }
-              required
-            />
+              {showUsersTable ? (
+                <Card>
+                  <h2 className="mb-4 text-lg font-semibold text-slate-900">
+                    Users
+                  </h2>
 
-            <Input
-              label="Phone"
-              value={userForm.phone}
-              onChange={(e) =>
-                setUserForm((prev) => ({ ...prev, phone: e.target.value }))
-              }
-            />
+                  <TableWrap>
+                    <table className="min-w-[650px] w-full text-left text-sm">
+                      <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3">Name</th>
+                          <th className="px-4 py-3">Email</th>
+                          <th className="px-4 py-3">Role</th>
+                        </tr>
+                      </thead>
 
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-700">
-                Assign Role
-              </span>
-              <select
-                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-                value={userForm.roleId}
-                onChange={(e) =>
-                  setUserForm((prev) => ({ ...prev, roleId: e.target.value }))
-                }
-                required
-              >
-                <option value="">Select Role</option>
-                {roles.map((role) => (
-                  <option key={role._id} value={role._id}>
-                    {role.name} - {role.permissions?.includes("*")
-                      ? "Full System Access"
-                      : `${role.permissions?.length || 0} permissions`}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <Button type="submit">Create User</Button>
-          </form>
-        </Card>
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-2">
-        <Card>
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">Roles</h2>
-
-          <TableWrap>
-            <table className="min-w-[750px] w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Key</th>
-                  <th className="px-4 py-3">Permissions</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  <tr>
-                    <td className="px-4 py-6" colSpan="3">
-                      Loading...
-                    </td>
-                  </tr>
-                ) : roles.length === 0 ? (
-                  <tr>
-                    <td className="px-4 py-6" colSpan="3">
-                      No roles found.
-                    </td>
-                  </tr>
-                ) : (
-                  roles.map((role) => (
-                    <tr key={role._id}>
-                      <td className="px-4 py-3">
-                        <p className="font-semibold text-slate-900">
-                          {role.name}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {role.description || "-"}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3">{role.key}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex max-w-md flex-wrap gap-1.5">
-                          {role.permissions?.includes("*") ? (
-                            <div className="rounded-xl bg-purple-50 px-3 py-2 text-xs ring-1 ring-purple-200">
-                              <p className="font-semibold text-purple-700">
-                                Full System Access
-                              </p>
-                              <p className="mt-0.5 text-purple-600">
-                                Can access all modules and perform all actions.
-                              </p>
-                            </div>
-                          ) : (
-                            <>
-                              {(role.permissions || []).slice(0, 5).map((permission) => (
-                                <span
-                                  key={permission}
-                                  title={getPermissionDescription(permission)}
-                                  className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700"
-                                >
-                                  {getPermissionLabel(permission)}
+                      <tbody className="divide-y divide-slate-100">
+                        {loading ? (
+                          <tr>
+                            <td className="px-4 py-6" colSpan="3">
+                              Loading...
+                            </td>
+                          </tr>
+                        ) : users.length === 0 ? (
+                          <tr>
+                            <td className="px-4 py-6" colSpan="3">
+                              No users found.
+                            </td>
+                          </tr>
+                        ) : (
+                          users.map((user) => (
+                            <tr key={user._id}>
+                              <td className="px-4 py-3 font-semibold text-slate-900">
+                                {user.name}
+                              </td>
+                              <td className="px-4 py-3">{user.email}</td>
+                              <td className="px-4 py-3">
+                                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                                  {user.role?.name || "-"}
                                 </span>
-                              ))}
-
-                              {(role.permissions || []).length > 5 ? (
-                                <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
-                                  +{role.permissions.length - 5} more
-                                </span>
-                              ) : null}
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </TableWrap>
-        </Card>
-
-        <Card>
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">Users</h2>
-
-          <TableWrap>
-            <table className="min-w-[650px] w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Email</th>
-                  <th className="px-4 py-3">Role</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  <tr>
-                    <td className="px-4 py-6" colSpan="3">
-                      Loading...
-                    </td>
-                  </tr>
-                ) : users.length === 0 ? (
-                  <tr>
-                    <td className="px-4 py-6" colSpan="3">
-                      No users found.
-                    </td>
-                  </tr>
-                ) : (
-                  users.map((user) => (
-                    <tr key={user._id}>
-                      <td className="px-4 py-3 font-semibold text-slate-900">
-                        {user.name}
-                      </td>
-                      <td className="px-4 py-3">{user.email}</td>
-                      <td className="px-4 py-3">
-                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                          {user.role?.name || "-"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </TableWrap>
-        </Card>
-      </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </TableWrap>
+                </Card>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }
