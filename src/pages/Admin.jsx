@@ -763,8 +763,14 @@ export default function Admin() {
                     <Input
                       label="Phone"
                       value={userForm.phone}
+                      maxLength={10}
+                      inputMode="numeric"
+                      placeholder="10 digit phone number"
                       onChange={(e) =>
-                        setUserForm((prev) => ({ ...prev, phone: e.target.value }))
+                        setUserForm((prev) => ({
+                          ...prev,
+                          phone: e.target.value.replace(/\D/g, "").slice(0, 10)
+                        }))
                       }
                     />
 
