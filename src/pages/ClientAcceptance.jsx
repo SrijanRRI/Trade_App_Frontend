@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { Star } from "lucide-react";
 import Button from "../components/Button";
 import Card from "../components/Card";
 import Input from "../components/Input";
@@ -63,6 +64,9 @@ export default function ClientAcceptance() {
   const sale = acceptance?.sale;
   const isRejected = acceptance?.status === "rejected";
   const isAccepted = acceptance?.status === "accepted";
+
+  const ratingValue = Number(form.rating || 0);
+  const feedbackMissing = !form.feedback.trim();
 
   return (
     <div className="min-h-screen bg-slate-50 p-4">
@@ -183,14 +187,52 @@ export default function ClientAcceptance() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <Input
-                      label="Rating"
-                      type="number"
-                      min="1"
-                      max="5"
-                      value={form.rating}
-                      onChange={(e) => setForm((prev) => ({ ...prev, rating: e.target.value }))}
-                    />
+                    <div>
+                      <p className="mb-2 text-sm font-medium text-slate-700">
+                        Rating
+                      </p>
+
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {[1, 2, 3, 4, 5].map((rating) => {
+                            const active = rating <= ratingValue;
+
+                            return (
+                              <button
+                                key={rating}
+                                type="button"
+                                onClick={() =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    rating
+                                  }))
+                                }
+                                className={[
+                                  "rounded-xl p-2 transition",
+                                  active
+                                    ? "bg-amber-100 text-amber-500"
+                                    : "bg-white text-slate-300 hover:bg-slate-100 hover:text-amber-400"
+                                ].join(" ")}
+                                aria-label={`Rate ${rating} out of 5`}
+                              >
+                                <Star
+                                  size={24}
+                                  className={active ? "fill-amber-400" : ""}
+                                />
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <p className="mt-3 text-sm font-semibold text-slate-700">
+                          Selected Rating: {ratingValue}/5
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          1 means poor, 5 means excellent.
+                        </p>
+                      </div>
+                    </div>
 
                     <Input
                       label="Feedback"
@@ -200,10 +242,26 @@ export default function ClientAcceptance() {
                       onChange={(e) => setForm((prev) => ({ ...prev, feedback: e.target.value }))}
                     />
 
+                    {feedbackMissing ? (
+                      <p className="text-xs text-red-600">
+                        Feedback is required when rejecting the delivery.
+                      </p>
+                    ) : null}
+
                     <div className="flex gap-2">
-                      <Button variant="danger" onClick={reject}>
+                      <Button
+                        variant="danger"
+                        onClick={reject}
+                        disabled={feedbackMissing}
+                        title={
+                          feedbackMissing
+                            ? "Please enter feedback before submitting rejection"
+                            : "Submit rejection"
+                        }
+                      >
                         Submit Rejection
                       </Button>
+
                       <Button variant="secondary" onClick={() => setRejectMode(false)}>
                         Cancel
                       </Button>
