@@ -7,10 +7,16 @@ import Card from "../components/Card";
 import TableWrap from "../components/TableWrap";
 import { saleApi, tallyApi } from "../api/api";
 import { currency, formatDate } from "../utils/format";
+import { useAuth } from "../context/AuthContext";
 
 export default function SaleDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  const { hasPermission } = useAuth();
+
+  const canSyncSalesTally = hasPermission("tally.sales_sync");
+  const canGenerateAcceptanceLink = hasPermission("sales.create");
 
   const [sale, setSale] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -32,6 +38,11 @@ export default function SaleDetail() {
   }, [id]);
 
   const syncTally = async () => {
+    if (!canSyncSalesTally) {
+      setMessage("You do not have permission to push sales voucher to Tally.");
+      return;
+    }
+
     setMessage("");
     try {
       const res = await tallyApi.syncSaleDummy(id);
@@ -44,6 +55,11 @@ export default function SaleDetail() {
   };
 
   const generateLink = async () => {
+    if (!canGenerateAcceptanceLink) {
+      setMessage("You do not have permission to generate client acceptance link.");
+      return;
+    }
+
     setMessage("");
     try {
       const res = await saleApi.generateAcceptanceLink(id);
@@ -57,6 +73,10 @@ export default function SaleDetail() {
 
   if (loading) return <Card>Loading sale...</Card>;
   if (!sale) return <Card>Sale not found.</Card>;
+
+  const clientAcceptance = sale.clientAcceptance;
+  const isClientRejected = sale.clientAcceptanceStatus === "rejected";
+  const isClientAccepted = sale.clientAcceptanceStatus === "accepted";
 
   return (
     <div className="space-y-5">
@@ -82,17 +102,41 @@ export default function SaleDetail() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={syncTally}
-            disabled={sale.tallyStatus === "dummy_synced"}
-          >
-            Push Sales to Tally
-          </Button>
+        <div className="flex flex-col items-start gap-2 xl:items-end">
+          <div className="flex flex-wrap gap-2 xl:justify-end">
+            <Button
+              onClick={syncTally}
+              disabled={sale.tallyStatus === "dummy_synced" || !canSyncSalesTally}
+              title={
+                !canSyncSalesTally
+                  ? "You do not have permission to push sales voucher to Tally"
+                  : sale.tallyStatus === "dummy_synced"
+                    ? "Sales voucher is already dummy synced"
+                    : "Push sales voucher to dummy Tally"
+              }
+            >
+              Push Sales to Tally
+            </Button>
 
-          <Button variant="secondary" onClick={generateLink}>
-            Generate Acceptance Link
-          </Button>
+            <Button
+              variant="secondary"
+              onClick={generateLink}
+              disabled={!canGenerateAcceptanceLink}
+              title={
+                canGenerateAcceptanceLink
+                  ? "Generate client acceptance link"
+                  : "You do not have permission to generate client acceptance link"
+              }
+            >
+              Generate Acceptance Link
+            </Button>
+          </div>
+
+          {(!canSyncSalesTally || !canGenerateAcceptanceLink) ? (
+            <p className="max-w-md text-left text-xs text-slate-500 xl:text-right">
+              Some actions are disabled because your role does not have permission.
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -133,6 +177,60 @@ export default function SaleDetail() {
           <div className="mt-2"><Badge value={sale.clientAcceptanceStatus} /></div>
         </Card>
       </div>
+
+      {isClientRejected ? (
+        <Card className="border-red-200 bg-red-50">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-red-800">
+                Client Rejected This Delivery
+              </p>
+              <p className="mt-1 text-sm text-red-700">
+                The client has rejected the sale/delivery. Reason and rating are shown below.
+              </p>
+            </div>
+
+            <Badge value={sale.clientAcceptanceStatus} />
+          </div>
+
+          <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+            <div className="rounded-xl border border-red-200 bg-white p-3">
+              <p className="text-xs font-medium uppercase text-slate-500">
+                Rating
+              </p>
+              <p className="mt-1 text-lg font-bold text-red-700">
+                {clientAcceptance?.rating ? `${clientAcceptance.rating}/5` : "-"}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-red-200 bg-white p-3 md:col-span-2">
+              <p className="text-xs font-medium uppercase text-slate-500">
+                Rejection Reason / Feedback
+              </p>
+              <p className="mt-1 whitespace-pre-line text-sm text-slate-700">
+                {clientAcceptance?.feedback || "-"}
+              </p>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
+      {isClientAccepted ? (
+        <Card className="border-emerald-200 bg-emerald-50">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-emerald-800">
+                Client Accepted This Delivery
+              </p>
+              <p className="mt-1 text-sm text-emerald-700">
+                The client has accepted the sale/delivery.
+              </p>
+            </div>
+
+            <Badge value={sale.clientAcceptanceStatus} />
+          </div>
+        </Card>
+      ) : null}
 
       <TableWrap>
         <table className="min-w-[900px] w-full text-left text-sm">

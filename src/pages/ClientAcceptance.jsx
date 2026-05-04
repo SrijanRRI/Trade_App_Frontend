@@ -61,6 +61,8 @@ export default function ClientAcceptance() {
   };
 
   const sale = acceptance?.sale;
+  const isRejected = acceptance?.status === "rejected";
+  const isAccepted = acceptance?.status === "accepted";
 
   return (
     <div className="min-h-screen bg-slate-50 p-4">
@@ -113,6 +115,60 @@ export default function ClientAcceptance() {
                 ))}
               </div>
             </Card>
+
+            {isRejected ? (
+              <Card className="border-red-200 bg-red-50">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-red-800">
+                      Delivery Rejected
+                    </p>
+                    <p className="mt-1 text-sm text-red-700">
+                      The client has rejected this delivery.
+                    </p>
+                  </div>
+
+                  <Badge value={acceptance.status} />
+                </div>
+
+                <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+                  <div className="rounded-xl border border-red-200 bg-white p-3">
+                    <p className="text-xs font-medium uppercase text-slate-500">
+                      Rating
+                    </p>
+                    <p className="mt-1 text-lg font-bold text-red-700">
+                      {acceptance.rating ? `${acceptance.rating}/5` : "-"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-red-200 bg-white p-3 md:col-span-2">
+                    <p className="text-xs font-medium uppercase text-slate-500">
+                      Rejection Reason / Feedback
+                    </p>
+                    <p className="mt-1 whitespace-pre-line text-sm text-slate-700">
+                      {acceptance.feedback || "-"}
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            ) : null}
+
+            {isAccepted ? (
+              <Card className="border-emerald-200 bg-emerald-50">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-800">
+                      Delivery Accepted
+                    </p>
+                    <p className="mt-1 text-sm text-emerald-700">
+                      The client has accepted this delivery.
+                    </p>
+                  </div>
+
+                  <Badge value={acceptance.status} />
+                </div>
+              </Card>
+            ) : null}
 
             {["accepted", "rejected"].includes(acceptance.status) ? null : (
               <Card>
