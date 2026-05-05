@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Card from "../components/Card";
@@ -22,6 +22,7 @@ export default function SaleDetail() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [acceptanceLink, setAcceptanceLink] = useState("");
+  const [generatingLink, setGeneratingLink] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -60,14 +61,24 @@ export default function SaleDetail() {
       return;
     }
 
-    setMessage("");
+    setMessage("Generating acceptance link and sending email to customer...");
+    setGeneratingLink(true);
+
     try {
       const res = await saleApi.generateAcceptanceLink(id);
       setAcceptanceLink(res.link);
-      setMessage(res.message);
+
+      setMessage(
+        res.emailSent
+          ? res.message
+          : `${res.message}${res.emailError ? ` Error: ${res.emailError}` : ""}`
+      );
+
       await load();
     } catch (err) {
       setMessage(err.message);
+    } finally {
+      setGeneratingLink(false);
     }
   };
 
@@ -121,14 +132,23 @@ export default function SaleDetail() {
             <Button
               variant="secondary"
               onClick={generateLink}
-              disabled={!canGenerateAcceptanceLink}
+              disabled={!canGenerateAcceptanceLink || generatingLink}
               title={
-                canGenerateAcceptanceLink
-                  ? "Generate client acceptance link"
-                  : "You do not have permission to generate client acceptance link"
+                !canGenerateAcceptanceLink
+                  ? "You do not have permission to generate client acceptance link"
+                  : generatingLink
+                    ? "Generating link and sending email..."
+                    : "Generate client acceptance link"
               }
             >
-              Generate Acceptance Link
+              {generatingLink ? (
+                <>
+                  <Loader2 size={16} className="mr-2 animate-spin" />
+                  Sending Email...
+                </>
+              ) : (
+                "Generate Acceptance Link"
+              )}
             </Button>
           </div>
 
