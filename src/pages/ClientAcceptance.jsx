@@ -14,6 +14,11 @@ export default function ClientAcceptance() {
   const [acceptance, setAcceptance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [rejectMode, setRejectMode] = useState(false);
+
+  const [acceptMode, setAcceptMode] = useState(false);
+  const [acceptFeedback, setAcceptFeedback] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+
   const [form, setForm] = useState({
     rating: 5,
     feedback: ""
@@ -38,26 +43,41 @@ export default function ClientAcceptance() {
 
   const accept = async () => {
     setMessage("");
+    setActionLoading(true);
+
     try {
-      const res = await clientAcceptanceApi.accept(token);
+      const res = await clientAcceptanceApi.accept(token, {
+        feedback: acceptFeedback.trim()
+      });
+
       setMessage(res.message);
       setAcceptance(res.acceptance);
+      setAcceptMode(false);
+      setAcceptFeedback("");
     } catch (err) {
       setMessage(err.message);
+    } finally {
+      setActionLoading(false);
     }
   };
 
   const reject = async () => {
     setMessage("");
+    setActionLoading(true);
+
     try {
       const res = await clientAcceptanceApi.reject(token, {
         rating: Number(form.rating),
-        feedback: form.feedback
+        feedback: form.feedback.trim()
       });
+
       setMessage(res.message);
       setAcceptance(res.acceptance);
+      setRejectMode(false);
     } catch (err) {
       setMessage(err.message);
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -167,6 +187,17 @@ export default function ClientAcceptance() {
                     <p className="mt-1 text-sm text-emerald-700">
                       The client has accepted this delivery.
                     </p>
+
+                    {acceptance.feedback ? (
+                      <div className="mt-4 rounded-xl border border-emerald-200 bg-white p-3">
+                        <p className="text-xs font-medium uppercase text-slate-500">
+                          Client Feedback / Note
+                        </p>
+                        <p className="mt-1 whitespace-pre-line text-sm text-slate-700">
+                          {acceptance.feedback}
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
 
                   <Badge value={acceptance.status} />
@@ -176,14 +207,51 @@ export default function ClientAcceptance() {
 
             {["accepted", "rejected"].includes(acceptance.status) ? null : (
               <Card>
-                {!rejectMode ? (
+                {!rejectMode && !acceptMode ? (
                   <div className="flex flex-wrap gap-2">
-                    <Button variant="success" onClick={accept}>
+                    <Button variant="success" onClick={() => setAcceptMode(true)}>
                       Accept Delivery
                     </Button>
+
                     <Button variant="danger" onClick={() => setRejectMode(true)}>
                       Reject Delivery
                     </Button>
+                  </div>
+                ) : acceptMode ? (
+                  <div className="space-y-4">
+                    <Input
+                      label="Feedback / Note Optional"
+                      as="textarea"
+                      rows="4"
+                      value={acceptFeedback}
+                      placeholder="You can add a note before accepting the delivery..."
+                      onChange={(e) => setAcceptFeedback(e.target.value)}
+                    />
+
+                    <p className="text-xs text-slate-500">
+                      Feedback is optional. You can accept without writing anything.
+                    </p>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="success"
+                        onClick={accept}
+                        disabled={actionLoading}
+                      >
+                        {actionLoading ? "Accepting..." : "Submit Acceptance"}
+                      </Button>
+
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setAcceptMode(false);
+                          setAcceptFeedback("");
+                        }}
+                        disabled={actionLoading}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -252,17 +320,21 @@ export default function ClientAcceptance() {
                       <Button
                         variant="danger"
                         onClick={reject}
-                        disabled={feedbackMissing}
+                        disabled={feedbackMissing || actionLoading}
                         title={
                           feedbackMissing
                             ? "Please enter feedback before submitting rejection"
                             : "Submit rejection"
                         }
                       >
-                        Submit Rejection
+                        {actionLoading ? "Submitting..." : "Submit Rejection"}
                       </Button>
 
-                      <Button variant="secondary" onClick={() => setRejectMode(false)}>
+                      <Button
+                        variant="secondary"
+                        onClick={() => setRejectMode(false)}
+                        disabled={actionLoading}
+                      >
                         Cancel
                       </Button>
                     </div>

@@ -1,19 +1,15 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:7849/api";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 
 export const TOKEN_KEY = "purchase_sales_token";
 
 const getToken = () => localStorage.getItem(TOKEN_KEY);
 
 const request = async (path, options = {}) => {
-  const {
-    method = "GET",
-    body,
-    auth = true,
-    headers = {}
-  } = options;
+  const { method = "GET", body, auth = true, headers = {} } = options;
 
   const finalHeaders = {
-    ...headers
+    ...headers,
   };
 
   if (!(body instanceof FormData)) {
@@ -34,7 +30,7 @@ const request = async (path, options = {}) => {
       ? body instanceof FormData
         ? body
         : JSON.stringify(body)
-      : undefined
+      : undefined,
   });
 
   const data = await response.json().catch(() => ({}));
@@ -51,17 +47,17 @@ export const authApi = {
     request("/auth/bootstrap", {
       method: "POST",
       body: payload,
-      auth: false
+      auth: false,
     }),
 
   login: (payload) =>
     request("/auth/login", {
       method: "POST",
       body: payload,
-      auth: false
+      auth: false,
     }),
 
-  me: () => request("/auth/me")
+  me: () => request("/auth/me"),
 };
 
 export const userApi = {
@@ -69,13 +65,13 @@ export const userApi = {
   create: (payload) =>
     request("/users", {
       method: "POST",
-      body: payload
+      body: payload,
     }),
   update: (id, payload) =>
     request(`/users/${id}`, {
       method: "PUT",
-      body: payload
-    })
+      body: payload,
+    }),
 };
 
 export const roleApi = {
@@ -83,13 +79,13 @@ export const roleApi = {
   create: (payload) =>
     request("/roles", {
       method: "POST",
-      body: payload
+      body: payload,
     }),
   update: (id, payload) =>
     request(`/roles/${id}`, {
       method: "PUT",
-      body: payload
-    })
+      body: payload,
+    }),
 };
 
 export const purchaseOrderApi = {
@@ -103,35 +99,35 @@ export const purchaseOrderApi = {
   create: (payload) =>
     request("/purchase-orders", {
       method: "POST",
-      body: payload
+      body: payload,
     }),
 
   seedDummy: () =>
     request("/purchase-orders/seed-dummy", {
-      method: "POST"
+      method: "POST",
     }),
 
   accept: (id) =>
     request(`/purchase-orders/${id}/accept`, {
-      method: "POST"
+      method: "POST",
     }),
 
   reject: (id, reason) =>
     request(`/purchase-orders/${id}/reject`, {
       method: "POST",
-      body: { reason }
+      body: { reason },
     }),
 
   partialAccept: (id, items) =>
     request(`/purchase-orders/${id}/partial-accept`, {
       method: "POST",
-      body: { items }
+      body: { items },
     }),
 
   moveToInventory: (id) =>
     request(`/purchase-orders/${id}/move-to-inventory`, {
-      method: "POST"
-    })
+      method: "POST",
+    }),
 };
 
 export const inventoryApi = {
@@ -145,8 +141,8 @@ export const inventoryApi = {
   update: (id, payload) =>
     request(`/inventory/${id}`, {
       method: "PUT",
-      body: payload
-    })
+      body: payload,
+    }),
 };
 
 export const saleApi = {
@@ -160,13 +156,13 @@ export const saleApi = {
   create: (payload) =>
     request("/sales", {
       method: "POST",
-      body: payload
+      body: payload,
     }),
 
   generateAcceptanceLink: (id) =>
     request(`/sales/${id}/send-acceptance-link`, {
-      method: "POST"
-    })
+      method: "POST",
+    }),
 };
 
 export const tallyApi = {
@@ -174,33 +170,34 @@ export const tallyApi = {
 
   syncPurchaseDummy: (poId) =>
     request(`/tally/purchase/${poId}/sync-dummy`, {
-      method: "POST"
+      method: "POST",
     }),
 
   syncSaleDummy: (saleId) =>
     request(`/tally/sales/${saleId}/sync-dummy`, {
-      method: "POST"
-    })
+      method: "POST",
+    }),
 };
 
 export const clientAcceptanceApi = {
   get: (token) =>
     request(`/client-acceptance/${token}`, {
-      auth: false
+      auth: false,
     }),
 
-  accept: (token) =>
+  accept: (token, payload = {}) =>
     request(`/client-acceptance/${token}/accept`, {
       method: "POST",
-      auth: false
+      body: payload,
+      auth: false,
     }),
 
   reject: (token, payload) =>
     request(`/client-acceptance/${token}/reject`, {
       method: "POST",
       body: payload,
-      auth: false
-    })
+      auth: false,
+    }),
 };
 
 export const reportApi = {
@@ -208,5 +205,5 @@ export const reportApi = {
   inventory: () => request("/reports/inventory"),
   sales: () => request("/reports/sales"),
   profitLoss: () => request("/reports/profit-loss"),
-  userActivity: () => request("/reports/user-activity")
+  userActivity: () => request("/reports/user-activity"),
 };

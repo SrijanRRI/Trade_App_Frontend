@@ -237,7 +237,7 @@ export default function SaleDetail() {
 
       {isClientAccepted ? (
         <Card className="border-emerald-200 bg-emerald-50">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-emerald-800">
                 Client Accepted This Delivery
@@ -249,6 +249,26 @@ export default function SaleDetail() {
 
             <Badge value={sale.clientAcceptanceStatus} />
           </div>
+
+          {clientAcceptance?.feedback ? (
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-white p-3">
+              <p className="text-xs font-medium uppercase text-slate-500">
+                Client Feedback / Note
+              </p>
+              <p className="mt-1 whitespace-pre-line text-sm text-slate-700">
+                {clientAcceptance.feedback}
+              </p>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-white p-3">
+              <p className="text-xs font-medium uppercase text-slate-500">
+                Client Feedback / Note
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                No feedback was provided by the client.
+              </p>
+            </div>
+          )}
         </Card>
       ) : null}
 
