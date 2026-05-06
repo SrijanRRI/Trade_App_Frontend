@@ -550,9 +550,9 @@ export default function Inventory() {
     load();
   }, [canViewInventory]);
 
-  const isIncomingStock = (item) => {
-    return item.vendorStockStatus === "incoming" || item.inventoryStatus === "incoming";
-  };
+  // const isIncomingStock = (item) => {
+  //   return item.vendorStockStatus === "incoming" || item.inventoryStatus === "incoming";
+  // };
 
   const openSaleModal = (item) => {
     setMessage("");
@@ -567,10 +567,10 @@ export default function Inventory() {
       return;
     }
 
-    if (isIncomingStock(item)) {
-      setMessage("This item is incoming stock. Sale can be created only after stock is ready.");
-      return;
-    }
+    // if (isIncomingStock(item)) {
+    //   setMessage("This item is incoming stock. Sale can be created only after stock is ready.");
+    //   return;
+    // }
 
     setSelected(item);
     setSaleForm({
@@ -617,10 +617,10 @@ export default function Inventory() {
       return;
     }
 
-    if (selected && isIncomingStock(selected)) {
-      setMessage("This item is incoming stock. Sale can be created only after stock is ready.");
-      return;
-    }
+    // if (selected && isIncomingStock(selected)) {
+    //   setMessage("This item is incoming stock. Sale can be created only after stock is ready.");
+    //   return;
+    // }
 
     setMessage("");
     setActionLoading(true);
@@ -753,10 +753,12 @@ export default function Inventory() {
               </tr>
             ) : (
               data.map((item) => {
+                // const hasAvailableQty = Number(item.availableQuantity || 0) > 0;
+                // const incoming = isIncomingStock(item);
+                // const canCreateSaleFromItem = canCreateSale && hasAvailableQty && !incoming;
+
                 const hasAvailableQty = Number(item.availableQuantity || 0) > 0;
-                const incoming = isIncomingStock(item);
-                const canCreateSaleFromItem =
-                  canCreateSale && hasAvailableQty && !incoming;
+                const canCreateSaleFromItem = canCreateSale && hasAvailableQty;
 
                 return (
                   <tr key={item._id} className="hover:bg-slate-50">
@@ -823,14 +825,21 @@ export default function Inventory() {
                         <Button
                           size="sm"
                           disabled={!canCreateSaleFromItem}
+                          // title={
+                          //   !canCreateSale
+                          //     ? "You do not have permission to create sales"
+                          //     : !hasAvailableQty
+                          //       ? "No available quantity"
+                          //       : incoming
+                          //         ? "Incoming stock cannot be sold yet"
+                          //         : "Create sale from this inventory"
+                          // }
                           title={
                             !canCreateSale
                               ? "You do not have permission to create sales"
                               : !hasAvailableQty
                                 ? "No available quantity"
-                                : incoming
-                                  ? "Incoming stock cannot be sold yet"
-                                  : "Create sale from this inventory"
+                                : "Create sale from this inventory"
                           }
                           onClick={() => openSaleModal(item)}
                         >
