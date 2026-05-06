@@ -50,7 +50,7 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-4">
       <Card className="w-full max-w-md border-white/10 bg-white/95 p-6 shadow-2xl">
         <div className="mb-6">
-          <p className="text-sm font-medium text-blue-600">ERP-lite</p>
+          <p className="text-sm font-medium text-blue-600">Trade_App</p>
           <h1 className="mt-1 text-2xl font-bold text-slate-950">
             Purchase Sales Integration
           </h1>

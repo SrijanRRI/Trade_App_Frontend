@@ -49,36 +49,62 @@ const permissionGroups = [
       }
     ]
   },
+  // {
+  //   title: "Purchase Orders",
+  //   description: "Manage purchase order workflow.",
+  //   permissions: [
+  //     {
+  //       id: "purchase.view",
+  //       label: "Purchase View",
+  //       description: "Can view purchase orders and PO details."
+  //     },
+  //     {
+  //       id: "purchase.create",
+  //       label: "Purchase Create",
+  //       description: "Can create manual purchase orders and seed dummy POs."
+  //     },
+  //     {
+  //       id: "purchase.edit",
+  //       label: "Purchase Edit",
+  //       description: "Can edit purchase orders before inventory movement."
+  //     },
+  //     {
+  //       id: "purchase.accept",
+  //       label: "Purchase Accept",
+  //       description: "Can accept or partially accept PO items."
+  //     },
+  //     {
+  //       id: "purchase.reject",
+  //       label: "Purchase Reject",
+  //       description: "Can reject PO items with reason."
+  //     }
+  //   ]
+  // },
   {
     title: "Purchase Orders",
-    description: "Manage purchase order workflow.",
+    description: "Manage vendor approval based purchase order workflow.",
     permissions: [
       {
         id: "purchase.view",
         label: "Purchase View",
-        description: "Can view purchase orders and PO details."
+        description: "Can view purchase orders and PO details.",
       },
       {
         id: "purchase.create",
         label: "Purchase Create",
-        description: "Can create manual purchase orders and seed dummy POs."
+        description: "Can create manual purchase orders and seed dummy POs.",
       },
       {
         id: "purchase.edit",
         label: "Purchase Edit",
-        description: "Can edit purchase orders before inventory movement."
+        description: "Can edit purchase orders before inventory movement.",
       },
       {
-        id: "purchase.accept",
-        label: "Purchase Accept",
-        description: "Can accept or partially accept PO items."
+        id: "purchase.resend_vendor_approval",
+        label: "Resend Vendor Approval",
+        description: "Can resend purchase order approval email to vendor.",
       },
-      {
-        id: "purchase.reject",
-        label: "Purchase Reject",
-        description: "Can reject PO items with reason."
-      }
-    ]
+    ],
   },
   {
     title: "Inventory",
@@ -121,11 +147,11 @@ const permissionGroups = [
         label: "Tally Logs View",
         description: "Can view Tally sync logs."
       },
-      {
-        id: "tally.purchase_sync",
-        label: "Purchase Tally Sync",
-        description: "Can update purchase voucher in dummy Tally."
-      },
+      // {
+      //   id: "tally.purchase_sync",
+      //   label: "Purchase Tally Sync",
+      //   description: "Can update purchase voucher in dummy Tally."
+      // },
       {
         id: "tally.sales_sync",
         label: "Sales Tally Sync",
@@ -167,14 +193,15 @@ const rolePresets = [
       "purchase.view",
       "purchase.create",
       "purchase.edit",
-      "purchase.accept",
-      "purchase.reject",
+      "purchase.resend_vendor_approval",
+      // "purchase.accept",
+      // "purchase.reject",
       "inventory.view",
       "inventory.edit",
       "sales.view",
       "sales.create",
       "tally.view",
-      "tally.purchase_sync",
+      // "tally.purchase_sync",
       "tally.sales_sync",
       "report.view"
     ]
@@ -187,8 +214,9 @@ const rolePresets = [
       "purchase.view",
       "purchase.create",
       "purchase.edit",
-      "purchase.accept",
-      "purchase.reject",
+      "purchase.resend_vendor_approval",
+      // "purchase.accept",
+      // "purchase.reject",
       "inventory.view",
       "tally.view",
       "tally.purchase_sync",
@@ -229,7 +257,7 @@ const rolePresets = [
       "inventory.view",
       "sales.view",
       "tally.view",
-      "tally.purchase_sync",
+      // "tally.purchase_sync",
       "tally.sales_sync",
       "report.view"
     ]

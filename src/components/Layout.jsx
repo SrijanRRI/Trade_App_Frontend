@@ -45,7 +45,7 @@ export default function Layout() {
       >
         <div className="flex h-16 items-center justify-between border-b border-white/10 px-5">
           <div>
-            <p className="text-sm text-blue-200">ERP-lite</p>
+            <p className="text-sm text-blue-200">Trade_App</p>
             <h1 className="text-lg font-bold">Purchase Sales</h1>
           </div>
 

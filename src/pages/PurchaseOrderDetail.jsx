@@ -1,53 +1,89 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Mail, Pencil } from "lucide-react";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Card from "../components/Card";
 import Input from "../components/Input";
 import Modal from "../components/Modal";
 import TableWrap from "../components/TableWrap";
-import { purchaseOrderApi, tallyApi } from "../api/api";
+import { purchaseOrderApi } from "../api/api";
 import { currency, formatDate } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
+
+const toDateInput = (value) => {
+  if (!value) return "";
+  return new Date(value).toISOString().slice(0, 10);
+};
+
+const calculateItemAmount = (item) => {
+  const qty = Number(item.qty || 0);
+  const rate = Number(item.rate || 0);
+  const gstPercent = Number(item.gstPercent || 0);
+
+  const basic = qty * rate;
+  const gstAmount = (basic * gstPercent) / 100;
+  const total = basic + gstAmount;
+
+  return {
+    basic,
+    taxable: basic,
+    igst: gstAmount,
+    cgst: 0,
+    sgst: 0,
+    total,
+  };
+};
+
+const calculatePoAmount = (items) => {
+  const amount = {
+    basic: 0,
+    discount: 0,
+    totalTax: 0,
+    otherCharges: 0,
+    igst: 0,
+    cgst: 0,
+    sgst: 0,
+    total: 0,
+  };
+
+  for (const item of items) {
+    amount.basic += Number(item.amount?.basic || 0);
+    amount.igst += Number(item.amount?.igst || 0);
+    amount.cgst += Number(item.amount?.cgst || 0);
+    amount.sgst += Number(item.amount?.sgst || 0);
+    amount.total += Number(item.amount?.total || 0);
+  }
+
+  amount.totalTax = amount.igst + amount.cgst + amount.sgst;
+
+  return amount;
+};
 
 export default function PurchaseOrderDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-
   const { hasPermission } = useAuth();
 
-  const canAcceptPurchase = hasPermission("purchase.accept");
-  const canRejectPurchase = hasPermission("purchase.reject");
-  const canSyncPurchaseTally = hasPermission("tally.purchase_sync");
+  const canEditPurchase = hasPermission("purchase.edit");
+  // const canResendVendorApproval = hasPermission("purchase.create");
+  const canResendVendorApproval = hasPermission("purchase.resend_vendor_approval");
 
   const [po, setPo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [partialOpen, setPartialOpen] = useState(false);
-  const [partialItems, setPartialItems] = useState([]);
 
-  const canTallySync = useMemo(() => {
-    return po?.inventoryStatus !== "not_moved" && po?.tallyStatus !== "dummy_synced";
-  }, [po]);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState(null);
 
   const load = async () => {
     setLoading(true);
     try {
       const res = await purchaseOrderApi.get(id);
       setPo(res.po);
-      setPartialItems(
-        (res.po.items || []).map((item) => ({
-          itemId: item._id,
-          itemCode: item.itemCode,
-          itemName: item.itemName || item.itemDescription,
-          qty: item.qty || 0,
-          acceptedQuantity: item.acceptedQuantity || item.qty || 0,
-          rejectedQuantity: item.rejectedQuantity || 0,
-          rejectionReason: item.rejectionReason || ""
-        }))
-      );
+    } catch (err) {
+      setMessage(err.message);
     } finally {
       setLoading(false);
     }
@@ -57,13 +93,123 @@ export default function PurchaseOrderDetail() {
     load();
   }, [id]);
 
-  const runAction = async (fn, successMessage) => {
+  const canEditThisPO = po?.inventoryStatus === "not_moved";
+  const canShowVendorActions = ["vendor_rejected", "pending_vendor_approval"].includes(
+    po?.status,
+  );
+
+  const openEditModal = () => {
+    if (!po) return;
+
+    setMessage("");
+
+    setEditForm({
+      poNumber: po.poNumber || "",
+      poDate: toDateInput(po.poDate),
+      company: po.company || "",
+      division: po.division || "",
+      purchaseType: po.purchaseType || "",
+      departmentName: po.departmentName || "",
+      vendorName: po.vendorName || "",
+      vendorCode: po.vendorCode || "",
+      vendorLocation: po.vendorLocation || "",
+      vendorEmail: po.vendorEmail || "",
+      vendorPhone: po.vendorPhone || "",
+      remarks: po.remarks || "",
+      items: (po.items || []).map((item) => ({
+        _id: item._id,
+        sourceItemId: item.sourceItemId || "",
+        itemId: item.itemId || "",
+        itemCode: item.itemCode || "",
+        itemName: item.itemName || "",
+        itemDescription: item.itemDescription || "",
+        hsnCode: item.hsnCode || "",
+        make: item.make || "",
+        techSpec: item.techSpec || "",
+        qty: item.qty || 0,
+        unit: item.unit || "",
+        rate: item.rate || 0,
+        gstPercent: item.gstPercent || 0,
+        schedule: item.schedule || "",
+        remarks: item.remarks || "",
+        amount: item.amount || calculateItemAmount(item),
+      })),
+    });
+
+    setEditOpen(true);
+  };
+
+  const updateEditForm = (key, value) => {
+    setEditForm((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  const updateEditItem = (index, key, value) => {
+    setEditForm((prev) => {
+      const items = [...prev.items];
+      const nextItem = {
+        ...items[index],
+        [key]: value,
+      };
+
+      if (["qty", "rate", "gstPercent"].includes(key)) {
+        nextItem.amount = calculateItemAmount(nextItem);
+      }
+
+      items[index] = nextItem;
+
+      return {
+        ...prev,
+        items,
+      };
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!canEditPurchase) {
+      setMessage("You do not have permission to edit purchase orders.");
+      return;
+    }
+
+    if (!canEditThisPO) {
+      setMessage("Cannot edit PO after inventory movement.");
+      return;
+    }
+
     setActionLoading(true);
     setMessage("");
 
     try {
-      await fn();
-      setMessage(successMessage);
+      const items = editForm.items.map((item) => {
+        const normalized = {
+          ...item,
+          qty: Number(item.qty || 0),
+          rate: Number(item.rate || 0),
+          gstPercent: Number(item.gstPercent || 0),
+        };
+
+        return {
+          ...normalized,
+          amount: calculateItemAmount(normalized),
+        };
+      });
+
+      const payload = {
+        ...editForm,
+        poDate: editForm.poDate ? new Date(editForm.poDate) : undefined,
+        vendorEmail: editForm.vendorEmail?.trim().toLowerCase(),
+        vendorPhone: editForm.vendorPhone?.trim(),
+        items,
+        amount: calculatePoAmount(items),
+      };
+
+      await purchaseOrderApi.update(id, payload);
+
+      setEditOpen(false);
+      setEditForm(null);
+      setMessage("Purchase order updated successfully. You can now resend it to vendor.");
       await load();
     } catch (err) {
       setMessage(err.message);
@@ -72,80 +218,24 @@ export default function PurchaseOrderDetail() {
     }
   };
 
-  // const acceptAll = () => {
-  //   runAction(() => purchaseOrderApi.accept(id), "PO accepted and inventory created.");
-  // };
-
-  const acceptAll = () => {
-    if (!canAcceptPurchase) {
-      setMessage("You do not have permission to accept purchase orders.");
+  const resendToVendor = async () => {
+    if (!canResendVendorApproval) {
+      setMessage("You do not have permission to resend PO to vendor.");
       return;
     }
 
-    runAction(() => purchaseOrderApi.accept(id), "PO accepted and inventory created.");
-  };
+    setActionLoading(true);
+    setMessage("");
 
-  // const rejectAll = () => {
-  //   const reason = window.prompt("Enter rejection reason");
-
-  //   if (!reason) return;
-
-  //   runAction(() => purchaseOrderApi.reject(id, reason), "PO rejected.");
-  // };
-
-  const rejectAll = () => {
-    if (!canRejectPurchase) {
-      setMessage("You do not have permission to reject purchase orders.");
-      return;
+    try {
+      const res = await purchaseOrderApi.resendVendorApproval(id);
+      setMessage(res.message);
+      await load();
+    } catch (err) {
+      setMessage(err.message);
+    } finally {
+      setActionLoading(false);
     }
-
-    const reason = window.prompt("Enter rejection reason");
-
-    if (!reason) return;
-
-    runAction(() => purchaseOrderApi.reject(id, reason), "PO rejected.");
-  };
-
-  // const syncTally = () => {
-  //   runAction(() => tallyApi.syncPurchaseDummy(id), "Dummy purchase voucher synced.");
-  // };
-
-  const syncTally = () => {
-    if (!canSyncPurchaseTally) {
-      setMessage("You do not have permission to update purchase voucher in Tally.");
-      return;
-    }
-
-    runAction(() => tallyApi.syncPurchaseDummy(id), "Dummy purchase voucher synced.");
-  };
-
-  // const submitPartial = () => {
-  //   runAction(
-  //     () => purchaseOrderApi.partialAccept(id, partialItems),
-  //     "PO partially accepted and inventory created."
-  //   );
-  //   setPartialOpen(false);
-  // };
-
-  const submitPartial = () => {
-    if (!canAcceptPurchase) {
-      setMessage("You do not have permission to partially accept purchase orders.");
-      return;
-    }
-
-    runAction(
-      () => purchaseOrderApi.partialAccept(id, partialItems),
-      "PO partially accepted and inventory created."
-    );
-    setPartialOpen(false);
-  };
-
-  const updatePartial = (index, key, value) => {
-    setPartialItems((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], [key]: value };
-      return next;
-    });
   };
 
   if (loading) return <Card>Loading purchase order...</Card>;
@@ -175,66 +265,36 @@ export default function PurchaseOrderDetail() {
           </div>
         </div>
 
-        <div className="flex flex-col items-start gap-2 xl:items-end">
-          <div className="flex flex-wrap gap-2 xl:justify-end">
+        <div className="flex flex-wrap gap-2 xl:justify-end">
+          {canEditThisPO ? (
             <Button
-              variant="success"
-              onClick={acceptAll}
-              disabled={actionLoading || !canAcceptPurchase}
+              variant="outline"
+              onClick={openEditModal}
+              disabled={actionLoading || !canEditPurchase}
               title={
-                canAcceptPurchase
-                  ? "Accept all PO items"
-                  : "You do not have permission to accept purchase orders"
+                canEditPurchase
+                  ? "Edit purchase order before resending"
+                  : "You do not have permission to edit purchase orders"
               }
             >
-              Accept All
+              <Pencil size={16} className="mr-2" />
+              Edit PO
             </Button>
+          ) : null}
 
+          {canShowVendorActions ? (
             <Button
-              variant="warning"
-              onClick={() => setPartialOpen(true)}
-              disabled={actionLoading || !canAcceptPurchase}
+              onClick={resendToVendor}
+              disabled={actionLoading || !canResendVendorApproval}
               title={
-                canAcceptPurchase
-                  ? "Partially accept PO items"
-                  : "You do not have permission to partially accept purchase orders"
+                canResendVendorApproval
+                  ? "Send this purchase order to vendor email again"
+                  : "You do not have permission to resend PO to vendor"
               }
             >
-              Partial Accept
+              <Mail size={16} className="mr-2" />
+              {actionLoading ? "Sending..." : "Resend to Vendor"}
             </Button>
-
-            <Button
-              variant="danger"
-              onClick={rejectAll}
-              disabled={actionLoading || !canRejectPurchase}
-              title={
-                canRejectPurchase
-                  ? "Reject purchase order"
-                  : "You do not have permission to reject purchase orders"
-              }
-            >
-              Reject
-            </Button>
-
-            <Button
-              onClick={syncTally}
-              disabled={!canTallySync || actionLoading || !canSyncPurchaseTally}
-              title={
-                !canSyncPurchaseTally
-                  ? "You do not have permission to update purchase voucher in Tally"
-                  : !canTallySync
-                    ? "PO must be moved to inventory before Tally update, or it is already synced"
-                    : "Update purchase voucher in dummy Tally"
-              }
-            >
-              Update in Tally
-            </Button>
-          </div>
-
-          {!canAcceptPurchase || !canRejectPurchase || !canSyncPurchaseTally ? (
-            <p className="max-w-md text-left text-xs text-slate-500 xl:text-right">
-              Some actions are disabled because your role does not have permission.
-            </p>
           ) : null}
         </div>
       </div>
@@ -249,30 +309,107 @@ export default function PurchaseOrderDetail() {
 
         <Card>
           <p className="text-sm text-slate-500">PO Status</p>
-          <div className="mt-2"><Badge value={po.status} /></div>
+          <div className="mt-2">
+            <Badge value={po.status} />
+          </div>
         </Card>
 
         <Card>
           <p className="text-sm text-slate-500">Inventory Status</p>
-          <div className="mt-2"><Badge value={po.inventoryStatus} /></div>
+          <div className="mt-2">
+            <Badge value={po.inventoryStatus} />
+          </div>
         </Card>
 
         <Card>
-          <p className="text-sm text-slate-500">Tally Status</p>
-          <div className="mt-2"><Badge value={po.tallyStatus} /></div>
+          <p className="text-sm text-slate-500">Vendor Response</p>
+          <div className="mt-2">
+            <Badge value={po.vendorApproval?.status || "pending"} />
+          </div>
         </Card>
       </div>
 
       <Card>
         <h2 className="mb-4 text-lg font-semibold text-slate-900">PO Summary</h2>
+
         <div className="grid gap-3 text-sm md:grid-cols-3">
-          <p><span className="text-slate-500">Company:</span> {po.company || "-"}</p>
-          <p><span className="text-slate-500">Division:</span> {po.division || "-"}</p>
-          <p><span className="text-slate-500">Total:</span> {currency(po.amount?.total)}</p>
-          <p><span className="text-slate-500">Basic:</span> {currency(po.amount?.basic)}</p>
-          <p><span className="text-slate-500">Tax:</span> {currency(po.amount?.totalTax)}</p>
-          <p><span className="text-slate-500">Voucher:</span> {po.tallyVoucherNumber || "-"}</p>
+          <p>
+            <span className="text-slate-500">Company:</span> {po.company || "-"}
+          </p>
+          <p>
+            <span className="text-slate-500">Division:</span> {po.division || "-"}
+          </p>
+          <p>
+            <span className="text-slate-500">Total:</span>{" "}
+            {currency(po.amount?.total)}
+          </p>
+          <p>
+            <span className="text-slate-500">Basic:</span>{" "}
+            {currency(po.amount?.basic)}
+          </p>
+          <p>
+            <span className="text-slate-500">Tax:</span>{" "}
+            {currency(po.amount?.totalTax)}
+          </p>
+          <p>
+            <span className="text-slate-500">Source:</span> {po.sourceType || "-"}
+          </p>
         </div>
+      </Card>
+
+      <Card>
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">
+              Vendor Approval
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Vendor email response and stock availability decision.
+            </p>
+          </div>
+
+          <Badge value={po.vendorApproval?.status || po.status} />
+        </div>
+
+        <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
+          <p>
+            <span className="text-slate-500">Vendor Email:</span>{" "}
+            {po.vendorEmail || "-"}
+          </p>
+          <p>
+            <span className="text-slate-500">Vendor Phone:</span>{" "}
+            {po.vendorPhone || "-"}
+          </p>
+          <p>
+            <span className="text-slate-500">Response Date:</span>{" "}
+            {formatDate(po.vendorApproval?.respondedAt)}
+          </p>
+          <p>
+            <span className="text-slate-500">Stock Status:</span>{" "}
+            {po.vendorApproval?.decision
+              ? po.vendorApproval.decision.replaceAll("_", " ")
+              : "-"}
+          </p>
+          <p>
+            <span className="text-slate-500">Incoming Days:</span>{" "}
+            {po.vendorApproval?.incomingDays
+              ? `${po.vendorApproval.incomingDays} days`
+              : "-"}
+          </p>
+          <p>
+            <span className="text-slate-500">Expected Date:</span>{" "}
+            {formatDate(po.vendorApproval?.expectedAvailabilityDate)}
+          </p>
+        </div>
+
+        {po.vendorApproval?.rejectionReason ? (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <p className="font-semibold">Vendor Rejection Reason</p>
+            <p className="mt-1 whitespace-pre-line">
+              {po.vendorApproval.rejectionReason}
+            </p>
+          </div>
+        ) : null}
       </Card>
 
       <TableWrap>
@@ -297,15 +434,19 @@ export default function PurchaseOrderDetail() {
                   <p className="font-semibold text-slate-900">
                     {item.itemName || item.itemDescription}
                   </p>
-                  <p className="text-xs text-slate-500">{item.itemCode}</p>
+                  <p className="text-xs text-slate-500">{item.itemCode || "-"}</p>
                 </td>
                 <td className="px-4 py-3">{item.hsnCode || "-"}</td>
-                <td className="px-4 py-3">{item.qty} {item.unit}</td>
+                <td className="px-4 py-3">
+                  {item.qty} {item.unit}
+                </td>
                 <td className="px-4 py-3">{item.acceptedQuantity || 0}</td>
                 <td className="px-4 py-3">{item.rejectedQuantity || 0}</td>
                 <td className="px-4 py-3">{currency(item.rate)}</td>
                 <td className="px-4 py-3">{currency(item.amount?.total)}</td>
-                <td className="px-4 py-3"><Badge value={item.status} /></td>
+                <td className="px-4 py-3">
+                  <Badge value={item.status} />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -313,54 +454,259 @@ export default function PurchaseOrderDetail() {
       </TableWrap>
 
       <Modal
-        open={partialOpen}
-        title="Partial Accept PO Items"
-        onClose={() => setPartialOpen(false)}
+        open={editOpen}
+        title="Edit Purchase Order"
+        onClose={() => {
+          if (!actionLoading) {
+            setEditOpen(false);
+            setEditForm(null);
+          }
+        }}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setPartialOpen(false)}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setEditOpen(false);
+                setEditForm(null);
+              }}
+              disabled={actionLoading}
+            >
               Cancel
             </Button>
-            <Button onClick={submitPartial} disabled={actionLoading}>
-              Submit Partial Accept
+            <Button onClick={saveEdit} disabled={actionLoading || !canEditPurchase}>
+              {actionLoading ? "Saving..." : "Save Changes"}
             </Button>
           </>
         }
       >
-        <div className="space-y-4">
-          {partialItems.map((item, index) => (
-            <div key={item.itemId} className="rounded-2xl border border-slate-200 p-4">
-              <div className="mb-3">
-                <p className="font-semibold text-slate-900">{item.itemName}</p>
-                <p className="text-xs text-slate-500">
-                  {item.itemCode} / PO Qty: {item.qty}
-                </p>
-              </div>
+        {editForm ? (
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <h3 className="font-semibold text-slate-900">PO Details</h3>
 
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <Input
-                  label="Accepted Qty"
-                  type="number"
-                  value={item.acceptedQuantity}
-                  onChange={(e) => updatePartial(index, "acceptedQuantity", Number(e.target.value))}
+                  label="PO Number"
+                  value={editForm.poNumber}
+                  onChange={(e) => updateEditForm("poNumber", e.target.value)}
+                  required
                 />
 
                 <Input
-                  label="Rejected Qty"
-                  type="number"
-                  value={item.rejectedQuantity}
-                  onChange={(e) => updatePartial(index, "rejectedQuantity", Number(e.target.value))}
+                  label="PO Date"
+                  type="date"
+                  value={editForm.poDate}
+                  onChange={(e) => updateEditForm("poDate", e.target.value)}
                 />
 
                 <Input
-                  label="Rejection Reason"
-                  value={item.rejectionReason}
-                  onChange={(e) => updatePartial(index, "rejectionReason", e.target.value)}
+                  label="Company"
+                  value={editForm.company}
+                  onChange={(e) => updateEditForm("company", e.target.value)}
+                />
+
+                <Input
+                  label="Division"
+                  value={editForm.division}
+                  onChange={(e) => updateEditForm("division", e.target.value)}
+                />
+
+                <Input
+                  label="Purchase Type"
+                  value={editForm.purchaseType}
+                  onChange={(e) => updateEditForm("purchaseType", e.target.value)}
+                />
+
+                <Input
+                  label="Department"
+                  value={editForm.departmentName}
+                  onChange={(e) =>
+                    updateEditForm("departmentName", e.target.value)
+                  }
                 />
               </div>
             </div>
-          ))}
-        </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <h3 className="font-semibold text-slate-900">Vendor Details</h3>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <Input
+                  label="Vendor Name"
+                  value={editForm.vendorName}
+                  onChange={(e) => updateEditForm("vendorName", e.target.value)}
+                  required
+                />
+
+                <Input
+                  label="Vendor Code"
+                  value={editForm.vendorCode}
+                  onChange={(e) => updateEditForm("vendorCode", e.target.value)}
+                />
+
+                <Input
+                  label="Vendor Location"
+                  value={editForm.vendorLocation}
+                  onChange={(e) =>
+                    updateEditForm("vendorLocation", e.target.value)
+                  }
+                />
+
+                <Input
+                  label="Vendor Email"
+                  type="email"
+                  value={editForm.vendorEmail}
+                  onChange={(e) => updateEditForm("vendorEmail", e.target.value)}
+                  required
+                />
+
+                <Input
+                  label="Vendor Phone"
+                  value={editForm.vendorPhone}
+                  maxLength={10}
+                  inputMode="numeric"
+                  onChange={(e) =>
+                    updateEditForm(
+                      "vendorPhone",
+                      e.target.value.replace(/\D/g, "").slice(0, 10),
+                    )
+                  }
+                  required
+                />
+
+                <Input
+                  label="Remarks"
+                  value={editForm.remarks}
+                  onChange={(e) => updateEditForm("remarks", e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                <div>
+                  <h3 className="font-semibold text-slate-900">Items</h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Update item quantity, rate, GST and details before resending
+                    to vendor.
+                  </p>
+                </div>
+
+                <p className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                  Total: {currency(calculatePoAmount(editForm.items).total)}
+                </p>
+              </div>
+
+              <div className="mt-4 space-y-4">
+                {editForm.items.map((item, index) => (
+                  <div
+                    key={item._id || index}
+                    className="rounded-2xl border border-slate-200 bg-white p-4"
+                  >
+                    <div className="mb-4 flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          Item #{index + 1}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Line Total: {currency(item.amount?.total)}
+                        </p>
+                      </div>
+                      <Badge value={item.status || "pending_vendor_approval"} />
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      <Input
+                        label="Item Code"
+                        value={item.itemCode}
+                        onChange={(e) =>
+                          updateEditItem(index, "itemCode", e.target.value)
+                        }
+                      />
+
+                      <Input
+                        label="Item Name"
+                        value={item.itemName}
+                        onChange={(e) =>
+                          updateEditItem(index, "itemName", e.target.value)
+                        }
+                        required
+                      />
+
+                      <Input
+                        label="HSN"
+                        value={item.hsnCode}
+                        onChange={(e) =>
+                          updateEditItem(index, "hsnCode", e.target.value)
+                        }
+                      />
+
+                      <Input
+                        label="Unit"
+                        value={item.unit}
+                        onChange={(e) =>
+                          updateEditItem(index, "unit", e.target.value)
+                        }
+                      />
+
+                      <Input
+                        label="Quantity"
+                        type="number"
+                        value={item.qty}
+                        onChange={(e) =>
+                          updateEditItem(index, "qty", e.target.value)
+                        }
+                        required
+                      />
+
+                      <Input
+                        label="Rate"
+                        type="number"
+                        value={item.rate}
+                        onChange={(e) =>
+                          updateEditItem(index, "rate", e.target.value)
+                        }
+                        required
+                      />
+
+                      <Input
+                        label="GST %"
+                        type="number"
+                        value={item.gstPercent}
+                        onChange={(e) =>
+                          updateEditItem(index, "gstPercent", e.target.value)
+                        }
+                      />
+
+                      <Input
+                        label="Schedule"
+                        value={item.schedule}
+                        onChange={(e) =>
+                          updateEditItem(index, "schedule", e.target.value)
+                        }
+                      />
+
+                      <div className="md:col-span-2 xl:col-span-4">
+                        <Input
+                          label="Description"
+                          value={item.itemDescription}
+                          onChange={(e) =>
+                            updateEditItem(
+                              index,
+                              "itemDescription",
+                              e.target.value,
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

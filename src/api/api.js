@@ -107,25 +107,41 @@ export const purchaseOrderApi = {
       method: "POST",
     }),
 
-  accept: (id) =>
-    request(`/purchase-orders/${id}/accept`, {
+  // accept: (id) =>
+  //   request(`/purchase-orders/${id}/accept`, {
+  //     method: "POST",
+  //   }),
+
+  // reject: (id, reason) =>
+  //   request(`/purchase-orders/${id}/reject`, {
+  //     method: "POST",
+  //     body: { reason },
+  //   }),
+
+  // partialAccept: (id, items) =>
+  //   request(`/purchase-orders/${id}/partial-accept`, {
+  //     method: "POST",
+  //     body: { items },
+  //   }),
+
+  // moveToInventory: (id) =>
+  //   request(`/purchase-orders/${id}/move-to-inventory`, {
+  //     method: "POST",
+  //   }),
+
+  resendVendorApproval: (id) =>
+    request(`/purchase-orders/${id}/resend-vendor-approval`, {
       method: "POST",
     }),
 
-  reject: (id, reason) =>
-    request(`/purchase-orders/${id}/reject`, {
-      method: "POST",
-      body: { reason },
+  update: (id, payload) =>
+    request(`/purchase-orders/${id}`, {
+      method: "PUT",
+      body: payload,
     }),
 
-  partialAccept: (id, items) =>
-    request(`/purchase-orders/${id}/partial-accept`, {
-      method: "POST",
-      body: { items },
-    }),
-
-  moveToInventory: (id) =>
-    request(`/purchase-orders/${id}/move-to-inventory`, {
+  resendVendorApproval: (id) =>
+    request(`/purchase-orders/${id}/resend-vendor-approval`, {
       method: "POST",
     }),
 };
@@ -194,6 +210,27 @@ export const clientAcceptanceApi = {
 
   reject: (token, payload) =>
     request(`/client-acceptance/${token}/reject`, {
+      method: "POST",
+      body: payload,
+      auth: false,
+    }),
+};
+
+export const vendorPOApprovalApi = {
+  get: (token) =>
+    request(`/vendor-po-approval/${token}`, {
+      auth: false,
+    }),
+
+  accept: (token, payload) =>
+    request(`/vendor-po-approval/${token}/accept`, {
+      method: "POST",
+      body: payload,
+      auth: false,
+    }),
+
+  reject: (token, payload) =>
+    request(`/vendor-po-approval/${token}/reject`, {
       method: "POST",
       body: payload,
       auth: false,

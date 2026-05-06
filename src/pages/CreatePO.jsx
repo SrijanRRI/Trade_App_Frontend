@@ -25,6 +25,8 @@ export default function CreatePO() {
     vendorName: "",
     vendorCode: "",
     vendorLocation: "",
+    vendorEmail: "",
+    vendorPhone: "",
     company: "Demo Company",
     division: "Trading",
     purchaseType: "general",
@@ -110,6 +112,24 @@ export default function CreatePO() {
           <Input label="Vendor Name" value={form.vendorName} onChange={(e) => update("vendorName", e.target.value)} required />
           <Input label="Vendor Code" value={form.vendorCode} onChange={(e) => update("vendorCode", e.target.value)} />
           <Input label="Vendor Location" value={form.vendorLocation} onChange={(e) => update("vendorLocation", e.target.value)} />
+          <Input
+            label="Vendor Email"
+            type="email"
+            value={form.vendorEmail}
+            onChange={(e) => update("vendorEmail", e.target.value)}
+            required
+          />
+
+          <Input
+            label="Vendor Phone"
+            value={form.vendorPhone}
+            maxLength={10}
+            inputMode="numeric"
+            onChange={(e) =>
+              update("vendorPhone", e.target.value.replace(/\D/g, "").slice(0, 10))
+            }
+            required
+          />
         </div>
       </Card>
 
@@ -163,7 +183,7 @@ export default function CreatePO() {
           Cancel
         </Button>
         <Button type="submit" disabled={loading}>
-          {loading ? "Saving..." : "Save Purchase Order"}
+          {loading ? "Saving and Sending..." : "Save PO & Send to Vendor"}
         </Button>
       </div>
     </form>

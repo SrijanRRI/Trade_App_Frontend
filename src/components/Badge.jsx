@@ -17,7 +17,14 @@ const statusMap = {
   inventory_deducted: "bg-indigo-50 text-indigo-700 ring-indigo-200",
   link_sent: "bg-blue-50 text-blue-700 ring-blue-200",
   viewed: "bg-amber-50 text-amber-700 ring-amber-200",
-  expired: "bg-slate-100 text-slate-700 ring-slate-300"
+  expired: "bg-slate-100 text-slate-700 ring-slate-300",
+
+  pending_vendor_approval: "bg-amber-50 text-amber-700 ring-amber-200",
+  vendor_accepted: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  vendor_rejected: "bg-red-50 text-red-700 ring-red-200",
+  email_sent: "bg-blue-50 text-blue-700 ring-blue-200",
+  ready_stock: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  incoming: "bg-indigo-50 text-indigo-700 ring-indigo-200",
 };
 
 export default function Badge({ value }) {
