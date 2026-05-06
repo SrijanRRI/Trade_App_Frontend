@@ -14,6 +14,7 @@ import ClientAcceptance from "./pages/ClientAcceptance";
 import TallyLogs from "./pages/TallyLogs";
 import Reports from "./pages/Reports";
 import Admin from "./pages/Admin";
+import VendorPOApproval from "./pages/VendorPOApproval";
 
 function ProtectedRoute({ children }) {
   const { token, loading } = useAuth();
@@ -58,6 +59,7 @@ export default function App() {
       />
 
       <Route path="/client-acceptance/:token" element={<ClientAcceptance />} />
+      <Route path="/vendor-po-approval/:token" element={<VendorPOApproval />} />
 
       <Route
         path="/"
