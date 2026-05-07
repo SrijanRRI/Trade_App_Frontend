@@ -273,34 +273,76 @@ export default function SaleDetail() {
       ) : null}
 
       <TableWrap>
-        <table className="min-w-[900px] w-full text-left text-sm">
+        <table className="min-w-[1250px] w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
               <th className="px-4 py-3">Item</th>
               <th className="px-4 py-3">Source PO</th>
               <th className="px-4 py-3">Qty</th>
               <th className="px-4 py-3">Purchase Rate</th>
+              <th className="px-4 py-3">Purchase GST</th>
+              <th className="px-4 py-3">Purchase Total</th>
               <th className="px-4 py-3">Sale Rate</th>
-              <th className="px-4 py-3">GST</th>
-              <th className="px-4 py-3">Total</th>
+              <th className="px-4 py-3">Sale GST</th>
+              <th className="px-4 py-3">Sale Total</th>
+              <th className="px-4 py-3">Profit</th>
             </tr>
           </thead>
 
           <tbody className="divide-y divide-slate-100">
-            {sale.items?.map((item, index) => (
-              <tr key={index}>
-                <td className="px-4 py-3">
-                  <p className="font-semibold">{item.itemName}</p>
-                  <p className="text-xs text-slate-500">{item.itemCode}</p>
-                </td>
-                <td className="px-4 py-3">{item.sourcePoNumber}</td>
-                <td className="px-4 py-3">{item.quantity}</td>
-                <td className="px-4 py-3">{currency(item.purchaseRate)}</td>
-                <td className="px-4 py-3">{currency(item.saleRate)}</td>
-                <td className="px-4 py-3">{item.gstPercent}%</td>
-                <td className="px-4 py-3">{currency(item.totalAmount)}</td>
-              </tr>
-            ))}
+            {sale.items?.map((item, index) => {
+              const purchaseTotal =
+                item.purchaseTotalAmount ??
+                Number(item.purchaseRate || 0) *
+                Number(item.quantity || 0) *
+                (1 + Number(item.purchaseGstPercent || 0) / 100);
+
+              const itemProfit =
+                item.profitAmount ?? Number(item.totalAmount || 0) - purchaseTotal;
+
+              return (
+                <tr key={index}>
+                  <td className="px-4 py-3">
+                    <p className="font-semibold">{item.itemName}</p>
+                    <p className="text-xs text-slate-500">{item.itemCode}</p>
+                  </td>
+
+                  <td className="px-4 py-3">{item.sourcePoNumber}</td>
+
+                  <td className="px-4 py-3">
+                    {item.quantity} {item.unit || ""}
+                  </td>
+
+                  <td className="px-4 py-3">
+                    {currency(item.purchaseRate)}
+                  </td>
+
+                  <td className="px-4 py-3">
+                    {item.purchaseGstPercent ?? 0}%
+                  </td>
+
+                  <td className="px-4 py-3">
+                    {currency(purchaseTotal)}
+                  </td>
+
+                  <td className="px-4 py-3">
+                    {currency(item.saleRate)}
+                  </td>
+
+                  <td className="px-4 py-3">
+                    {item.gstPercent ?? 0}%
+                  </td>
+
+                  <td className="px-4 py-3">
+                    {currency(item.totalAmount)}
+                  </td>
+
+                  <td className="px-4 py-3 font-semibold text-emerald-700">
+                    {currency(itemProfit)}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </TableWrap>
