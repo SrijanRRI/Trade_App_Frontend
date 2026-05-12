@@ -183,6 +183,19 @@ export const saleApi = {
 
 export const tallyApi = {
   logs: () => request("/tally/logs"),
+  
+     // ✅ Fetch Tally ledgers
+  ledgers: () => request("/tally/ledgers"),
+
+  // ✅ Fetch Tally stock items
+  stocks: () => request("/tally/stocks"),
+
+    moveToTally: (payload) =>
+    request("/tally/purchases", {
+      method: "POST",
+      body: payload,
+    }),
+
 
   syncPurchaseDummy: (poId) =>
     request(`/tally/purchase/${poId}/sync-dummy`, {

@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Mail, Pencil } from "lucide-react";
+import { ArrowLeft, Mail, Pencil, MoveRight } from "lucide-react";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Card from "../components/Card";
 import Input from "../components/Input";
 import Modal from "../components/Modal";
 import TableWrap from "../components/TableWrap";
-import { purchaseOrderApi } from "../api/api";
+import { purchaseOrderApi , tallyApi } from "../api/api";
 import { currency, formatDate } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 
@@ -66,7 +66,6 @@ export default function PurchaseOrderDetail() {
   const { hasPermission } = useAuth();
 
   const canEditPurchase = hasPermission("purchase.edit");
-  // const canResendVendorApproval = hasPermission("purchase.create");
   const canResendVendorApproval = hasPermission("purchase.resend_vendor_approval");
 
   const [po, setPo] = useState(null);
@@ -76,6 +75,19 @@ export default function PurchaseOrderDetail() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState(null);
+
+  const [tallyModalOpen, setTallyModalOpen] = useState(false);
+  const [tallyForm, setTallyForm] = useState({
+    receiptNoteNo: "",
+    receiptDocNo: "",
+    receiptDate: "",
+    dispatchedThrough: "",
+    destination: "",
+    carrierName: "",
+    billLrNo: "",
+    billLrDate: "",
+    motorVehicleNo: "",
+  });
 
   const load = async () => {
     setLoading(true);
@@ -165,6 +177,107 @@ export default function PurchaseOrderDetail() {
         items,
       };
     });
+  };
+
+  const updateTallyForm = (key, value) => {
+    setTallyForm((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  const buildTaxesFromPo = (poData) => {
+    const taxMap = new Map();
+
+    (poData?.items || []).forEach((item) => {
+      (item.taxDetails || []).forEach((tax) => {
+        if (tax?.status !== 1) return;
+        if ((tax?.chargeType || "").toUpperCase() !== "GST") return;
+
+        const ledgerName = String(tax.chargeName || "").trim();
+        const rate = Number(tax.chargeValue || 0);
+
+        if (!ledgerName || rate <= 0) return;
+
+        if (!taxMap.has(ledgerName)) {
+          taxMap.set(ledgerName, {
+            ledgerName,
+            rate,
+          });
+        }
+      });
+    });
+
+    return Array.from(taxMap.values());
+  };
+
+  const buildMoveToTallyPayload = () => {
+    const voucherDate =
+      toDateInput(po?.poDate) || new Date().toISOString().slice(0, 10);
+
+    return {
+      date: voucherDate,
+      voucherNumber: "",
+      referenceName: po?.poNumber || "",
+      partyLedgerName: po?.vendorName || po?.vendorCode || "",
+      purchaseLedgerName: "PURCHASE SERVICE",
+      roundOffLedgerName: "Round Off",
+      roundOffDecimals: 0,
+      receiptDetails: {
+        receiptNoteNo: tallyForm.receiptNoteNo,
+        receiptDate: tallyForm.receiptDate || voucherDate,
+        dispatchDocNo: tallyForm.receiptDocNo,
+        dispatchedThrough: tallyForm.dispatchedThrough,
+        destination: tallyForm.destination,
+        carrierName: tallyForm.carrierName,
+        billOfLadingNo: tallyForm.billLrNo,
+        billOfLadingDate: tallyForm.billLrDate || voucherDate,
+        motorVehicleNo: tallyForm.motorVehicleNo,
+      },
+      items: (po?.items || []).map((item) => ({
+        stockItemName:
+          item.itemName || item.itemDescription || item.itemCode || "ITEM",
+        description: item.itemDescription || item.techSpec || "",
+        qty: Number(item.acceptedQuantity || item.qty || 0),
+        rate: Number(item.rate || 0),
+        unit: item.unit || "NOS",
+        godownName: "Main Location",
+        batchName: "Primary Batch",
+      })),
+      taxes: buildTaxesFromPo(po),
+    };
+  };
+
+  const moveToTally = async () => {
+    setActionLoading(true);
+    setMessage("");
+
+    try {
+      const payload = buildMoveToTallyPayload();
+      console.log(JSON.stringify(payload, null, 2));
+      const res = await tallyApi.moveToTally(payload);
+
+      setMessage(res.message || "Purchase voucher moved to Tally successfully.");
+      setTallyModalOpen(false);
+
+      setTallyForm({
+        receiptNoteNo: "",
+        receiptDocNo: "",
+        receiptDate: "",
+        dispatchedThrough: "",
+        destination: "",
+        carrierName: "",
+        billLrNo: "",
+        billLrDate: "",
+        motorVehicleNo: "",
+      });
+
+      await load();
+    } catch (err) {
+      setMessage(err.message || "Failed to move purchase voucher to Tally.");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const saveEdit = async () => {
@@ -281,6 +394,15 @@ export default function PurchaseOrderDetail() {
               Edit PO
             </Button>
           ) : null}
+
+          <Button
+            variant="outline"
+            onClick={() => setTallyModalOpen(true)}
+            disabled={actionLoading}
+          >
+            <MoveRight size={16} className="mr-2" />
+            Move to Tally
+          </Button>
 
           {canShowVendorActions ? (
             <Button
@@ -707,6 +829,110 @@ export default function PurchaseOrderDetail() {
             </div>
           </div>
         ) : null}
+      </Modal>
+
+      <Modal
+        open={tallyModalOpen}
+        title="Move to Tally"
+        onClose={() => {
+          if (!actionLoading) setTallyModalOpen(false);
+        }}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setTallyModalOpen(false)}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button onClick={moveToTally} disabled={actionLoading}>
+              {actionLoading ? "Moving..." : "Move"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="font-semibold text-slate-900">Receipt Details</h3>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <Input
+                label="Receipt Note No(s)"
+                value={tallyForm.receiptNoteNo}
+                onChange={(e) =>
+                  updateTallyForm("receiptNoteNo", e.target.value)
+                }
+              />
+
+              <Input
+                label="Receipt Doc No."
+                value={tallyForm.receiptDocNo}
+                onChange={(e) =>
+                  updateTallyForm("receiptDocNo", e.target.value)
+                }
+              />
+
+              <Input
+                label="Date"
+                type="date"
+                value={tallyForm.receiptDate}
+                onChange={(e) =>
+                  updateTallyForm("receiptDate", e.target.value)
+                }
+              />
+
+              <Input
+                label="Dispatched Through"
+                value={tallyForm.dispatchedThrough}
+                onChange={(e) =>
+                  updateTallyForm("dispatchedThrough", e.target.value)
+                }
+              />
+
+              <Input
+                label="Destination"
+                value={tallyForm.destination}
+                onChange={(e) =>
+                  updateTallyForm("destination", e.target.value)
+                }
+              />
+
+              <Input
+                label="Carrier Name / Agent"
+                value={tallyForm.carrierName}
+                onChange={(e) =>
+                  updateTallyForm("carrierName", e.target.value)
+                }
+              />
+
+              <Input
+                label="Bill of Lading / LR-RR No."
+                value={tallyForm.billLrNo}
+                onChange={(e) =>
+                  updateTallyForm("billLrNo", e.target.value)
+                }
+              />
+
+              <Input
+                label="Bill of Lading / LR-RR Date"
+                type="date"
+                value={tallyForm.billLrDate}
+                onChange={(e) =>
+                  updateTallyForm("billLrDate", e.target.value)
+                }
+              />
+
+              <Input
+                label="Motor Vehicle No."
+                value={tallyForm.motorVehicleNo}
+                onChange={(e) =>
+                  updateTallyForm("motorVehicleNo", e.target.value)
+                }
+              />
+            </div>
+          </div>
+        </div>
       </Modal>
     </div>
   );
