@@ -304,7 +304,7 @@ export default function SaleDetail() {
                 <tr key={index}>
                   <td className="px-4 py-3">
                     <p className="font-semibold">{item.itemName}</p>
-                    <p className="text-xs text-slate-500">{item.itemCode}</p>
+                    {/* <p className="text-xs text-slate-500">{item.itemCode}</p> */}
                   </td>
 
                   <td className="px-4 py-3">{item.sourcePoNumber}</td>

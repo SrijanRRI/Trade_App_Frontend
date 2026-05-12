@@ -1,7 +1,7 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 
-export const TOKEN_KEY = "purchase_sales_token";
+export const TOKEN_KEY = "trade_app_token";
 
 const getToken = () => localStorage.getItem(TOKEN_KEY);
 
@@ -107,28 +107,6 @@ export const purchaseOrderApi = {
       method: "POST",
     }),
 
-  // accept: (id) =>
-  //   request(`/purchase-orders/${id}/accept`, {
-  //     method: "POST",
-  //   }),
-
-  // reject: (id, reason) =>
-  //   request(`/purchase-orders/${id}/reject`, {
-  //     method: "POST",
-  //     body: { reason },
-  //   }),
-
-  // partialAccept: (id, items) =>
-  //   request(`/purchase-orders/${id}/partial-accept`, {
-  //     method: "POST",
-  //     body: { items },
-  //   }),
-
-  // moveToInventory: (id) =>
-  //   request(`/purchase-orders/${id}/move-to-inventory`, {
-  //     method: "POST",
-  //   }),
-
   resendVendorApproval: (id) =>
     request(`/purchase-orders/${id}/resend-vendor-approval`, {
       method: "POST",
@@ -183,19 +161,18 @@ export const saleApi = {
 
 export const tallyApi = {
   logs: () => request("/tally/logs"),
-  
-     // ✅ Fetch Tally ledgers
+
+  // ✅ Fetch Tally ledgers
   ledgers: () => request("/tally/ledgers"),
 
   // ✅ Fetch Tally stock items
   stocks: () => request("/tally/stocks"),
 
-    moveToTally: (payload) =>
+  moveToTally: (payload) =>
     request("/tally/purchases", {
       method: "POST",
       body: payload,
     }),
-
 
   syncPurchaseDummy: (poId) =>
     request(`/tally/purchase/${poId}/sync-dummy`, {

@@ -766,9 +766,9 @@ export default function Inventory() {
                       <p className="font-semibold text-slate-900">
                         {item.itemName || "-"}
                       </p>
-                      <p className="text-xs text-slate-500">
-                        {item.itemCode || "-"}
-                      </p>
+                      {/* <p className="text-xs text-slate-500">
+                        {item.itemCode || "-"} 
+                      </p> */}
                       {item.itemDescription ? (
                         <p className="mt-1 max-w-xs text-xs leading-5 text-slate-600">
                           {item.itemDescription}
@@ -965,9 +965,9 @@ export default function Inventory() {
         {selected ? (
           <div className="space-y-4">
             <Card>
-              <p className="font-semibold text-slate-900">
+              {/* <p className="font-semibold text-slate-900">
                 {selected.itemCode || "-"}
-              </p>
+              </p> */}
               <p className="text-sm text-slate-500">
                 Source PO: {selected.sourcePoNumber || "-"}
               </p>

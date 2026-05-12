@@ -166,9 +166,9 @@ export default function VendorPOApproval() {
                         <p className="font-semibold text-slate-900">
                           {item.itemName || item.itemDescription}
                         </p>
-                        <p className="text-xs text-slate-500">
+                        {/* <p className="text-xs text-slate-500">
                           {item.itemCode || "-"}
-                        </p>
+                        </p> */}
                       </td>
                       <td className="px-4 py-3">{item.hsnCode || "-"}</td>
                       <td className="px-4 py-3">

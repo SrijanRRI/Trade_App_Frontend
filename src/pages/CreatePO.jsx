@@ -231,7 +231,7 @@ export default function CreatePO() {
     poNumber: `PO-MANUAL-${Date.now()}`,
     poDate: new Date().toISOString().slice(0, 10),
     vendorName: "",
-    vendorCode: "",
+    // vendorCode: "",
     vendorLocation: "",
     vendorEmail: "",
     vendorPhone: "",
@@ -308,7 +308,7 @@ export default function CreatePO() {
       setForm((prev) => ({
         ...prev,
         vendorName: "",
-        vendorCode: "",
+        // vendorCode: "",
         vendorLocation: "",
         vendorEmail: "",
         vendorPhone: "",
@@ -323,7 +323,7 @@ export default function CreatePO() {
     setForm((prev) => ({
       ...prev,
       vendorName: selectedLedger.name || "",
-      vendorCode: selectedLedger.name || "",
+      // vendorCode: selectedLedger.name || "",
       vendorLocation: selectedLedger.address || "",
       vendorEmail: selectedLedger.email || "",
       vendorPhone: phone,
@@ -426,7 +426,7 @@ export default function CreatePO() {
 
             return {
               ...item,
-              itemCode: undefined,
+              // itemCode: undefined,
               qty,
               rate,
               gstPercent: toNum(item.gstPercent),
@@ -515,11 +515,11 @@ export default function CreatePO() {
             required
           />
 
-          <Input
+          {/* <Input
             label="Vendor Code"
             value={form.vendorCode}
             onChange={(e) => update("vendorCode", e.target.value)}
-          />
+          /> */}
 
           <Input
             label="Vendor Location"

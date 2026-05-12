@@ -123,7 +123,7 @@ export default function PurchaseOrderDetail() {
       purchaseType: po.purchaseType || "",
       departmentName: po.departmentName || "",
       vendorName: po.vendorName || "",
-      vendorCode: po.vendorCode || "",
+      // vendorCode: po.vendorCode || "",
       vendorLocation: po.vendorLocation || "",
       vendorEmail: po.vendorEmail || "",
       vendorPhone: po.vendorPhone || "",
@@ -132,7 +132,7 @@ export default function PurchaseOrderDetail() {
         _id: item._id,
         sourceItemId: item.sourceItemId || "",
         itemId: item.itemId || "",
-        itemCode: item.itemCode || "",
+        // itemCode: item.itemCode || "",
         itemName: item.itemName || "",
         itemDescription: item.itemDescription || "",
         hsnCode: item.hsnCode || "",
@@ -219,7 +219,7 @@ export default function PurchaseOrderDetail() {
       date: voucherDate,
       voucherNumber: "",
       referenceName: po?.poNumber || "",
-      partyLedgerName: po?.vendorName || po?.vendorCode || "",
+      // partyLedgerName: po?.vendorName || po?.vendorCode || "",
       purchaseLedgerName: "PURCHASE SERVICE",
       roundOffLedgerName: "Round Off",
       roundOffDecimals: 0,
@@ -236,7 +236,7 @@ export default function PurchaseOrderDetail() {
       },
       items: (po?.items || []).map((item) => ({
         stockItemName:
-          item.itemName || item.itemDescription || item.itemCode || "ITEM",
+          item.itemName || item.itemDescription || "ITEM",
         description: item.itemDescription || item.techSpec || "",
         qty: Number(item.acceptedQuantity || item.qty || 0),
         rate: Number(item.rate || 0),
@@ -373,7 +373,8 @@ export default function PurchaseOrderDetail() {
               {po.poNumber}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Vendor: {po.vendorName || "-"} / {po.vendorCode || "-"}
+              {/* Vendor: {po.vendorName || "-"} / {po.vendorCode || "-"} */}
+              Vendor: {po.vendorName || "-"} 
             </p>
           </div>
         </div>
@@ -556,7 +557,7 @@ export default function PurchaseOrderDetail() {
                   <p className="font-semibold text-slate-900">
                     {item.itemName || item.itemDescription}
                   </p>
-                  <p className="text-xs text-slate-500">{item.itemCode || "-"}</p>
+                  {/* <p className="text-xs text-slate-500">{item.itemCode || "-"}</p> */}
                 </td>
                 <td className="px-4 py-3">{item.hsnCode || "-"}</td>
                 <td className="px-4 py-3">
@@ -661,11 +662,11 @@ export default function PurchaseOrderDetail() {
                   required
                 />
 
-                <Input
+                {/* <Input
                   label="Vendor Code"
                   value={editForm.vendorCode}
                   onChange={(e) => updateEditForm("vendorCode", e.target.value)}
-                />
+                /> */}
 
                 <Input
                   label="Vendor Location"
@@ -739,13 +740,13 @@ export default function PurchaseOrderDetail() {
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                      <Input
+                      {/* <Input
                         label="Item Code"
                         value={item.itemCode}
                         onChange={(e) =>
                           updateEditItem(index, "itemCode", e.target.value)
                         }
-                      />
+                      /> */}
 
                       <Input
                         label="Item Name"
