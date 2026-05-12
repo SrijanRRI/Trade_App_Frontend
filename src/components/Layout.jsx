@@ -19,7 +19,7 @@ const navItems = [
   { to: "/", label: "Dashboard", icon: Home },
   { to: "/purchase-orders", label: "Purchase Orders", icon: ClipboardList },
   { to: "/inventory", label: "Inventory", icon: Boxes },
-  { to: "/sales", label: "Sales", icon: ReceiptText },
+  { to: "/sales", label: "Sales Orders", icon: ReceiptText },
   { to: "/tally-logs", label: "Tally Logs", icon: ShieldCheck },
   { to: "/reports", label: "Reports", icon: FileBarChart },
   { to: "/admin", label: "Users & Roles", icon: Users }
@@ -46,7 +46,7 @@ export default function Layout() {
         <div className="flex h-16 items-center justify-between border-b border-white/10 px-5">
           <div>
             <p className="text-sm text-blue-200">Trade_App</p>
-            <h1 className="text-lg font-bold">Purchase Sales</h1>
+            <h1 className="text-lg font-bold">Trade Application</h1>
           </div>
 
           <button className="lg:hidden" onClick={() => setOpen(false)}>
