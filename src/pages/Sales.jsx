@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Plus } from "lucide-react";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import TableWrap from "../components/TableWrap";
 import { saleApi } from "../api/api";
 import { currency, formatDate } from "../utils/format";
+import { useAuth } from "../context/AuthContext";
 
 export default function Sales() {
+  const { hasPermission } = useAuth();
+
+  const canCreateSale = hasPermission("sales.create");
+
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -26,13 +32,29 @@ export default function Sales() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">
-          Sales
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Sales are created from inventory and profit is calculated using purchase total with GST and sale total with GST.
-        </p>
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">
+            Sales Orders
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Create sales orders from available inventory.
+          </p>
+        </div>
+
+        {canCreateSale ? (
+          <Link to="/sales/create">
+            <Button>
+              <Plus size={16} className="mr-2" />
+              Create Sales Order
+            </Button>
+          </Link>
+        ) : (
+          <Button disabled title="You do not have permission to create sales orders">
+            <Plus size={16} className="mr-2" />
+            Create Sales Order
+          </Button>
+        )}
       </div>
 
       <TableWrap>
@@ -63,7 +85,7 @@ export default function Sales() {
             ) : data.length === 0 ? (
               <tr>
                 <td className="px-4 py-6" colSpan="11">
-                  No sales found.
+                  No sales orders found.
                 </td>
               </tr>
             ) : (

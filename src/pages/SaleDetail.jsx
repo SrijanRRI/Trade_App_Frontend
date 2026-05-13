@@ -16,13 +16,13 @@ export default function SaleDetail() {
   const { hasPermission } = useAuth();
 
   const canSyncSalesTally = hasPermission("tally.sales_sync");
-  const canGenerateAcceptanceLink = hasPermission("sales.create");
+  // const canGenerateAcceptanceLink = hasPermission("sales.create");
 
   const [sale, setSale] = useState(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
-  const [acceptanceLink, setAcceptanceLink] = useState("");
-  const [generatingLink, setGeneratingLink] = useState(false);
+  // const [acceptanceLink, setAcceptanceLink] = useState("");
+  // const [generatingLink, setGeneratingLink] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -48,39 +48,39 @@ export default function SaleDetail() {
     try {
       const res = await tallyApi.syncSaleDummy(id);
       setMessage(res.message);
-      setAcceptanceLink(res.data?.acceptanceLink || "");
+      // setAcceptanceLink(res.data?.acceptanceLink || "");
       await load();
     } catch (err) {
       setMessage(err.message);
     }
   };
 
-  const generateLink = async () => {
-    if (!canGenerateAcceptanceLink) {
-      setMessage("You do not have permission to generate client acceptance link.");
-      return;
-    }
+  // const generateLink = async () => {
+  //   if (!canGenerateAcceptanceLink) {
+  //     setMessage("You do not have permission to generate client acceptance link.");
+  //     return;
+  //   }
 
-    setMessage("Generating acceptance link and sending email to customer...");
-    setGeneratingLink(true);
+  //   setMessage("Generating acceptance link and sending email to customer...");
+  //   setGeneratingLink(true);
 
-    try {
-      const res = await saleApi.generateAcceptanceLink(id);
-      setAcceptanceLink(res.link);
+  //   try {
+  //     const res = await saleApi.generateAcceptanceLink(id);
+  //     setAcceptanceLink(res.link);
 
-      setMessage(
-        res.emailSent
-          ? res.message
-          : `${res.message}${res.emailError ? ` Error: ${res.emailError}` : ""}`
-      );
+  //     setMessage(
+  //       res.emailSent
+  //         ? res.message
+  //         : `${res.message}${res.emailError ? ` Error: ${res.emailError}` : ""}`
+  //     );
 
-      await load();
-    } catch (err) {
-      setMessage(err.message);
-    } finally {
-      setGeneratingLink(false);
-    }
-  };
+  //     await load();
+  //   } catch (err) {
+  //     setMessage(err.message);
+  //   } finally {
+  //     setGeneratingLink(false);
+  //   }
+  // };
 
   if (loading) return <Card>Loading sale...</Card>;
   if (!sale) return <Card>Sale not found.</Card>;
@@ -129,7 +129,7 @@ export default function SaleDetail() {
               Push Sales to Tally
             </Button>
 
-            <Button
+            {/* <Button
               variant="secondary"
               onClick={generateLink}
               disabled={!canGenerateAcceptanceLink || generatingLink}
@@ -140,7 +140,7 @@ export default function SaleDetail() {
                     ? "Generating link and sending email..."
                     : "Generate client acceptance link"
               }
-            >
+             >
               {generatingLink ? (
                 <>
                   <Loader2 size={16} className="mr-2 animate-spin" />
@@ -149,10 +149,10 @@ export default function SaleDetail() {
               ) : (
                 "Generate Acceptance Link"
               )}
-            </Button>
+            </Button> */}
           </div>
 
-          {(!canSyncSalesTally || !canGenerateAcceptanceLink) ? (
+          {(!canSyncSalesTally ) ? (
             <p className="max-w-md text-left text-xs text-slate-500 xl:text-right">
               Some actions are disabled because your role does not have permission.
             </p>
@@ -162,7 +162,7 @@ export default function SaleDetail() {
 
       {message ? <Card className="text-sm text-slate-700">{message}</Card> : null}
 
-      {acceptanceLink ? (
+      {/* {acceptanceLink ? (
         <Card>
           <p className="text-sm font-medium text-slate-700">Client Acceptance Link</p>
           <a
@@ -174,7 +174,7 @@ export default function SaleDetail() {
             {acceptanceLink}
           </a>
         </Card>
-      ) : null}
+      ) : null} */}
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>

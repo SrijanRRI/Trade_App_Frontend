@@ -232,7 +232,7 @@ const rolePresets = [
       "inventory.view",
       "inventory.edit",
       "sales.view",
-      "sales.create",
+      // "sales.create",
       "report.view"
     ]
   },

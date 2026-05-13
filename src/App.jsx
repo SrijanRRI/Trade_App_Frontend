@@ -15,6 +15,7 @@ import TallyLogs from "./pages/TallyLogs";
 import Reports from "./pages/Reports";
 import Admin from "./pages/Admin";
 import VendorPOApproval from "./pages/VendorPOApproval";
+import CreateSalesOrder from "./pages/CreateSalesOrder";
 
 function ProtectedRoute({ children }) {
   const { token, loading } = useAuth();
@@ -75,6 +76,7 @@ export default function App() {
         <Route path="purchase-orders/:id" element={<PurchaseOrderDetail />} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="sales" element={<Sales />} />
+        <Route path="sales/create" element={<CreateSalesOrder />} />
         <Route path="sales/:id" element={<SaleDetail />} />
         <Route path="tally-logs" element={<TallyLogs />} />
         <Route path="reports" element={<Reports />} />

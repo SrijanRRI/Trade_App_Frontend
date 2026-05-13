@@ -94,7 +94,7 @@ export default function ClientAcceptance() {
         <Card className="mt-6">
           <p className="text-sm font-medium text-blue-600">Client Acceptance</p>
           <h1 className="mt-1 text-2xl font-bold text-slate-900">
-            Purchase Sales Delivery Confirmation
+            Sales Order Confirmation
           </h1>
           <p className="mt-2 text-sm text-slate-500">
             Please review the sale details and accept or reject the delivery.
@@ -145,10 +145,10 @@ export default function ClientAcceptance() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="text-sm font-semibold text-red-800">
-                      Delivery Rejected
+                      Sales Order Rejected
                     </p>
                     <p className="mt-1 text-sm text-red-700">
-                      The client has rejected this delivery.
+                      You have rejected this sales order.
                     </p>
                   </div>
 
@@ -182,10 +182,10 @@ export default function ClientAcceptance() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-sm font-semibold text-emerald-800">
-                      Delivery Accepted
+                      Sales Order Accepted
                     </p>
                     <p className="mt-1 text-sm text-emerald-700">
-                      The client has accepted this delivery.
+                      You have accepted this sales order.
                     </p>
 
                     {acceptance.feedback ? (
@@ -210,11 +210,11 @@ export default function ClientAcceptance() {
                 {!rejectMode && !acceptMode ? (
                   <div className="flex flex-wrap gap-2">
                     <Button variant="success" onClick={() => setAcceptMode(true)}>
-                      Accept Delivery
+                      Accept Sales Order
                     </Button>
 
                     <Button variant="danger" onClick={() => setRejectMode(true)}>
-                      Reject Delivery
+                      Reject Sales Order
                     </Button>
                   </div>
                 ) : acceptMode ? (
