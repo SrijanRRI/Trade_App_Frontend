@@ -89,6 +89,120 @@ export default function SaleDetail() {
   const isClientRejected = sale.clientAcceptanceStatus === "rejected";
   const isClientAccepted = sale.clientAcceptanceStatus === "accepted";
 
+  const groupedSaleItems = Object.values(
+    (sale.items || []).reduce((acc, item) => {
+      const key = (item.itemName || item.itemDescription || "Unnamed Item")
+        .trim()
+        .toLowerCase();
+
+      if (!acc[key]) {
+        acc[key] = {
+          itemName: item.itemName || item.itemDescription || "Unnamed Item",
+          itemDescription: item.itemDescription || "",
+          unit: item.unit || "",
+          sourcePoNumbers: new Set(),
+
+          quantity: 0,
+
+          purchaseRates: new Set(),
+          purchaseGstPercents: new Set(),
+          saleRates: new Set(),
+          saleGstPercents: new Set(),
+
+          purchaseBasicAmount: 0,
+          purchaseGstAmount: 0,
+          purchaseTotalAmount: 0,
+
+          saleBasicAmount: 0,
+          saleGstAmount: 0,
+          saleTotalAmount: 0,
+
+          profitAmount: 0,
+        };
+      }
+
+      const purchaseTotal =
+        item.purchaseTotalAmount ??
+        Number(item.purchaseRate || 0) *
+        Number(item.quantity || 0) *
+        (1 + Number(item.purchaseGstPercent || 0) / 100);
+
+      const purchaseBasic =
+        item.purchaseBasicAmount ??
+        Number(item.purchaseRate || 0) * Number(item.quantity || 0);
+
+      const purchaseGst =
+        item.purchaseGstAmount ?? Number(purchaseTotal || 0) - Number(purchaseBasic || 0);
+
+      const saleTotal = item.totalAmount || 0;
+      const saleGst = item.gstAmount || 0;
+      const saleBasic = item.basicAmount || 0;
+
+      const profit =
+        item.profitAmount ?? Number(saleTotal || 0) - Number(purchaseTotal || 0);
+
+      acc[key].quantity += Number(item.quantity || 0);
+
+      acc[key].purchaseBasicAmount += Number(purchaseBasic || 0);
+      acc[key].purchaseGstAmount += Number(purchaseGst || 0);
+      acc[key].purchaseTotalAmount += Number(purchaseTotal || 0);
+
+      acc[key].saleBasicAmount += Number(saleBasic || 0);
+      acc[key].saleGstAmount += Number(saleGst || 0);
+      acc[key].saleTotalAmount += Number(saleTotal || 0);
+
+      acc[key].profitAmount += Number(profit || 0);
+
+      if (item.sourcePoNumber) {
+        acc[key].sourcePoNumbers.add(item.sourcePoNumber);
+      }
+
+      if (item.purchaseRate !== undefined && item.purchaseRate !== null) {
+        acc[key].purchaseRates.add(Number(item.purchaseRate || 0));
+      }
+
+      if (item.purchaseGstPercent !== undefined && item.purchaseGstPercent !== null) {
+        acc[key].purchaseGstPercents.add(Number(item.purchaseGstPercent || 0));
+      }
+
+      if (item.saleRate !== undefined && item.saleRate !== null) {
+        acc[key].saleRates.add(Number(item.saleRate || 0));
+      }
+
+      if (item.gstPercent !== undefined && item.gstPercent !== null) {
+        acc[key].saleGstPercents.add(Number(item.gstPercent || 0));
+      }
+
+      return acc;
+    }, {}),
+  ).map((item) => {
+    const purchaseRates = Array.from(item.purchaseRates);
+    const purchaseGstPercents = Array.from(item.purchaseGstPercents);
+    const saleRates = Array.from(item.saleRates);
+    const saleGstPercents = Array.from(item.saleGstPercents);
+
+    return {
+      ...item,
+      sourcePoNumbers: Array.from(item.sourcePoNumbers),
+      purchaseRateLabel:
+        purchaseRates.length === 1
+          ? currency(purchaseRates[0])
+          : `Avg ${currency(item.purchaseBasicAmount / Math.max(item.quantity, 1))}`,
+      purchaseGstLabel:
+        purchaseGstPercents.length === 1
+          ? `${purchaseGstPercents[0]}%`
+          : "Mixed",
+      saleRateLabel:
+        saleRates.length === 1
+          ? currency(saleRates[0])
+          : `Avg ${currency(item.saleBasicAmount / Math.max(item.quantity, 1))}`,
+      saleGstLabel:
+        saleGstPercents.length === 1
+          ? `${saleGstPercents[0]}%`
+          : "Mixed",
+    };
+  });
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-center">
@@ -152,7 +266,7 @@ export default function SaleDetail() {
             </Button> */}
           </div>
 
-          {(!canSyncSalesTally ) ? (
+          {(!canSyncSalesTally) ? (
             <p className="max-w-md text-left text-xs text-slate-500 xl:text-right">
               Some actions are disabled because your role does not have permission.
             </p>
@@ -290,59 +404,61 @@ export default function SaleDetail() {
           </thead>
 
           <tbody className="divide-y divide-slate-100">
-            {sale.items?.map((item, index) => {
-              const purchaseTotal =
-                item.purchaseTotalAmount ??
-                Number(item.purchaseRate || 0) *
-                Number(item.quantity || 0) *
-                (1 + Number(item.purchaseGstPercent || 0) / 100);
+            {groupedSaleItems.map((item, index) => (
+              <tr key={index}>
+                <td className="px-4 py-3">
+                  <p className="font-semibold">{item.itemName}</p>
 
-              const itemProfit =
-                item.profitAmount ?? Number(item.totalAmount || 0) - purchaseTotal;
+                  {item.itemDescription ? (
+                    <p className="text-xs text-slate-500">{item.itemDescription}</p>
+                  ) : null}
+                </td>
 
-              return (
-                <tr key={index}>
-                  <td className="px-4 py-3">
-                    <p className="font-semibold">{item.itemName}</p>
-                    {/* <p className="text-xs text-slate-500">{item.itemCode}</p> */}
-                  </td>
+                <td className="px-4 py-3">
+                  {item.sourcePoNumbers.length > 0 ? (
+                    <div className="space-y-1">
+                      {item.sourcePoNumbers.map((poNumber) => (
+                        <p key={poNumber}>{poNumber}</p>
+                      ))}
+                    </div>
+                  ) : (
+                    "-"
+                  )}
+                </td>
 
-                  <td className="px-4 py-3">{item.sourcePoNumber}</td>
+                <td className="px-4 py-3">
+                  {item.quantity} {item.unit || ""}
+                </td>
 
-                  <td className="px-4 py-3">
-                    {item.quantity} {item.unit || ""}
-                  </td>
+                <td className="px-4 py-3">
+                  {item.purchaseRateLabel}
+                </td>
 
-                  <td className="px-4 py-3">
-                    {currency(item.purchaseRate)}
-                  </td>
+                <td className="px-4 py-3">
+                  {item.purchaseGstLabel}
+                </td>
 
-                  <td className="px-4 py-3">
-                    {item.purchaseGstPercent ?? 0}%
-                  </td>
+                <td className="px-4 py-3">
+                  {currency(item.purchaseTotalAmount)}
+                </td>
 
-                  <td className="px-4 py-3">
-                    {currency(purchaseTotal)}
-                  </td>
+                <td className="px-4 py-3">
+                  {item.saleRateLabel}
+                </td>
 
-                  <td className="px-4 py-3">
-                    {currency(item.saleRate)}
-                  </td>
+                <td className="px-4 py-3">
+                  {item.saleGstLabel}
+                </td>
 
-                  <td className="px-4 py-3">
-                    {item.gstPercent ?? 0}%
-                  </td>
+                <td className="px-4 py-3">
+                  {currency(item.saleTotalAmount)}
+                </td>
 
-                  <td className="px-4 py-3">
-                    {currency(item.totalAmount)}
-                  </td>
-
-                  <td className="px-4 py-3 font-semibold text-emerald-700">
-                    {currency(itemProfit)}
-                  </td>
-                </tr>
-              );
-            })}
+                <td className="px-4 py-3 font-semibold text-emerald-700">
+                  {currency(item.profitAmount)}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </TableWrap>
