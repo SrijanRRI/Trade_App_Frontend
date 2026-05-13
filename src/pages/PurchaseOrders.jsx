@@ -95,13 +95,13 @@ export default function PurchaseOrders() {
             <Link to="/purchase-orders/create">
               <Button>
                 <Plus size={16} className="mr-2" />
-                Create PO
+                Create Purchase Order
               </Button>
             </Link>
           ) : (
             <Button disabled title="You do not have permission to create purchase orders">
               <Plus size={16} className="mr-2" />
-              Create PO
+              Create Purchase Order
             </Button>
           )}
         </div>
