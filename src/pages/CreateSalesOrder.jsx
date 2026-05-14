@@ -577,8 +577,7 @@ export default function CreateSalesOrder() {
 
                       {dropdownOptions.map((stockOption) => (
                         <option key={stockOption._id} value={stockOption._id}>
-                          {getItemName(stockOption)} — PO:{" "}
-                          {stockOption.sourcePoNumber || "-"} — Purchase:{" "}
+                          {getItemName(stockOption)} — Purchase:{" "}
                           {currency(stockOption.rate)} + GST{" "}
                           {toNum(stockOption.gstPercent)}% — Can Select Now:{" "}
                           {formatQty(

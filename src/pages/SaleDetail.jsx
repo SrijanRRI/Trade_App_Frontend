@@ -95,113 +95,95 @@ export default function SaleDetail() {
         .trim()
         .toLowerCase();
 
+      const qty = Number(item.quantity || 0);
+
+      const purchaseBasic =
+        item.purchaseBasicAmount ??
+        Number(item.purchaseRate || 0) * qty;
+
+      const purchaseTotal =
+        item.purchaseTotalAmount ??
+        Number(item.purchaseRate || 0) *
+        qty *
+        (1 + Number(item.purchaseGstPercent || 0) / 100);
+
+      const purchaseGst =
+        item.purchaseGstAmount ??
+        Number(purchaseTotal || 0) - Number(purchaseBasic || 0);
+
+      const saleBasic = Number(item.basicAmount || 0);
+      const saleGst = Number(item.gstAmount || 0);
+      const saleTotal = Number(item.totalAmount || 0);
+
+      const profit =
+        item.profitAmount ?? Number(saleTotal || 0) - Number(purchaseTotal || 0);
+
       if (!acc[key]) {
         acc[key] = {
           itemName: item.itemName || item.itemDescription || "Unnamed Item",
           itemDescription: item.itemDescription || "",
           unit: item.unit || "",
-          sourcePoNumbers: new Set(),
 
           quantity: 0,
-
-          purchaseRates: new Set(),
-          purchaseGstPercents: new Set(),
-          saleRates: new Set(),
-          saleGstPercents: new Set(),
-
-          purchaseBasicAmount: 0,
-          purchaseGstAmount: 0,
           purchaseTotalAmount: 0,
-
-          saleBasicAmount: 0,
-          saleGstAmount: 0,
           saleTotalAmount: 0,
-
           profitAmount: 0,
+
+          lines: [],
         };
       }
 
-      const purchaseTotal =
-        item.purchaseTotalAmount ??
-        Number(item.purchaseRate || 0) *
-        Number(item.quantity || 0) *
-        (1 + Number(item.purchaseGstPercent || 0) / 100);
-
-      const purchaseBasic =
-        item.purchaseBasicAmount ??
-        Number(item.purchaseRate || 0) * Number(item.quantity || 0);
-
-      const purchaseGst =
-        item.purchaseGstAmount ?? Number(purchaseTotal || 0) - Number(purchaseBasic || 0);
-
-      const saleTotal = item.totalAmount || 0;
-      const saleGst = item.gstAmount || 0;
-      const saleBasic = item.basicAmount || 0;
-
-      const profit =
-        item.profitAmount ?? Number(saleTotal || 0) - Number(purchaseTotal || 0);
-
-      acc[key].quantity += Number(item.quantity || 0);
-
-      acc[key].purchaseBasicAmount += Number(purchaseBasic || 0);
-      acc[key].purchaseGstAmount += Number(purchaseGst || 0);
+      acc[key].quantity += qty;
       acc[key].purchaseTotalAmount += Number(purchaseTotal || 0);
-
-      acc[key].saleBasicAmount += Number(saleBasic || 0);
-      acc[key].saleGstAmount += Number(saleGst || 0);
       acc[key].saleTotalAmount += Number(saleTotal || 0);
-
       acc[key].profitAmount += Number(profit || 0);
 
-      if (item.sourcePoNumber) {
-        acc[key].sourcePoNumbers.add(item.sourcePoNumber);
-      }
-
-      if (item.purchaseRate !== undefined && item.purchaseRate !== null) {
-        acc[key].purchaseRates.add(Number(item.purchaseRate || 0));
-      }
-
-      if (item.purchaseGstPercent !== undefined && item.purchaseGstPercent !== null) {
-        acc[key].purchaseGstPercents.add(Number(item.purchaseGstPercent || 0));
-      }
-
-      if (item.saleRate !== undefined && item.saleRate !== null) {
-        acc[key].saleRates.add(Number(item.saleRate || 0));
-      }
-
-      if (item.gstPercent !== undefined && item.gstPercent !== null) {
-        acc[key].saleGstPercents.add(Number(item.gstPercent || 0));
-      }
+      acc[key].lines.push({
+        sourcePoNumber: item.sourcePoNumber || "-",
+        quantity: qty,
+        unit: item.unit || "",
+        purchaseRate: Number(item.purchaseRate || 0),
+        purchaseGstPercent: Number(item.purchaseGstPercent || 0),
+        purchaseTotal: Number(purchaseTotal || 0),
+        saleRate: Number(item.saleRate || 0),
+        saleGstPercent: Number(item.gstPercent || 0),
+        saleTotal: Number(saleTotal || 0),
+        profit: Number(profit || 0),
+      });
 
       return acc;
-    }, {}),
-  ).map((item) => {
-    const purchaseRates = Array.from(item.purchaseRates);
-    const purchaseGstPercents = Array.from(item.purchaseGstPercents);
-    const saleRates = Array.from(item.saleRates);
-    const saleGstPercents = Array.from(item.saleGstPercents);
+    }, {})
+  ).map((group) => ({
+    ...group,
+    lines: group.lines.sort((a, b) =>
+      String(a.sourcePoNumber).localeCompare(String(b.sourcePoNumber))
+    ),
+  }));
 
-    return {
-      ...item,
-      sourcePoNumbers: Array.from(item.sourcePoNumbers),
-      purchaseRateLabel:
-        purchaseRates.length === 1
-          ? currency(purchaseRates[0])
-          : `Avg ${currency(item.purchaseBasicAmount / Math.max(item.quantity, 1))}`,
-      purchaseGstLabel:
-        purchaseGstPercents.length === 1
-          ? `${purchaseGstPercents[0]}%`
-          : "Mixed",
-      saleRateLabel:
-        saleRates.length === 1
-          ? currency(saleRates[0])
-          : `Avg ${currency(item.saleBasicAmount / Math.max(item.quantity, 1))}`,
-      saleGstLabel:
-        saleGstPercents.length === 1
-          ? `${saleGstPercents[0]}%`
-          : "Mixed",
-    };
-  });
+  const LineList = ({ items, renderValue }) => (
+    <div className="space-y-1">
+      {items.map((line, idx) => (
+        <div key={idx} className="text-xs text-slate-600">
+          <span className="mr-1 font-medium text-slate-400">{idx + 1}.</span>
+          {renderValue(line)}
+        </div>
+      ))}
+    </div>
+  );
+
+  const PoBadgeList = ({ items }) => (
+    <div className="flex flex-col gap-1">
+      {items.map((line, idx) => (
+        <div
+          key={idx}
+          className="inline-flex w-fit items-center gap-2 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700"
+        >
+          <span className="font-semibold text-slate-500">{idx + 1}</span>
+          <span>{line.sourcePoNumber}</span>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className="space-y-5">
@@ -404,61 +386,165 @@ export default function SaleDetail() {
           </thead>
 
           <tbody className="divide-y divide-slate-100">
-            {groupedSaleItems.map((item, index) => (
-              <tr key={index}>
-                <td className="px-4 py-3">
-                  <p className="font-semibold">{item.itemName}</p>
+            {groupedSaleItems.map((item, index) => {
+              const isLoss = Number(item.profitAmount || 0) < 0;
 
-                  {item.itemDescription ? (
-                    <p className="text-xs text-slate-500">{item.itemDescription}</p>
-                  ) : null}
-                </td>
+              return (
+                <tr key={index} className="align-top hover:bg-slate-50">
+                  <td className="px-4 py-4">
+                    <p className="font-semibold text-slate-900">{item.itemName}</p>
+                    {item.itemDescription ? (
+                      <p className="mt-1 text-xs text-slate-500">{item.itemDescription}</p>
+                    ) : null}
+                  </td>
 
-                <td className="px-4 py-3">
-                  {item.sourcePoNumbers.length > 0 ? (
-                    <div className="space-y-1">
-                      {item.sourcePoNumbers.map((poNumber) => (
-                        <p key={poNumber}>{poNumber}</p>
-                      ))}
-                    </div>
-                  ) : (
-                    "-"
-                  )}
-                </td>
+                  <td className="px-4 py-4">
+                    <PoBadgeList items={item.lines} />
+                  </td>
 
-                <td className="px-4 py-3">
-                  {item.quantity} {item.unit || ""}
-                </td>
+                  <td className="px-4 py-4">
+                    <p className="font-semibold text-slate-900">
+                      {item.quantity} {item.unit || ""}
+                    </p>
 
-                <td className="px-4 py-3">
-                  {item.purchaseRateLabel}
-                </td>
+                    {item.lines.length > 1 ? (
+                      <div className="mt-2 rounded-xl bg-slate-50 p-2">
+                        <LineList
+                          items={item.lines}
+                          renderValue={(line) => (
+                            <span>
+                              {line.quantity} {line.unit}
+                            </span>
+                          )}
+                        />
+                      </div>
+                    ) : null}
+                  </td>
 
-                <td className="px-4 py-3">
-                  {item.purchaseGstLabel}
-                </td>
+                  <td className="px-4 py-4">
+                    {item.lines.length === 1 ? (
+                      <p className="font-medium text-slate-900">
+                        {currency(item.lines[0].purchaseRate)}
+                      </p>
+                    ) : (
+                      <div className="rounded-xl bg-slate-50 p-2">
+                        <LineList
+                          items={item.lines}
+                          renderValue={(line) => currency(line.purchaseRate)}
+                        />
+                      </div>
+                    )}
+                  </td>
 
-                <td className="px-4 py-3">
-                  {currency(item.purchaseTotalAmount)}
-                </td>
+                  <td className="px-4 py-4">
+                    {item.lines.length === 1 ? (
+                      <p className="font-medium text-slate-900">
+                        {item.lines[0].purchaseGstPercent}%
+                      </p>
+                    ) : (
+                      <div className="rounded-xl bg-slate-50 p-2">
+                        <LineList
+                          items={item.lines}
+                          renderValue={(line) => `${line.purchaseGstPercent}%`}
+                        />
+                      </div>
+                    )}
+                  </td>
 
-                <td className="px-4 py-3">
-                  {item.saleRateLabel}
-                </td>
+                  <td className="px-4 py-4">
+                    <p className="font-semibold text-slate-900">
+                      {currency(item.purchaseTotalAmount)}
+                    </p>
 
-                <td className="px-4 py-3">
-                  {item.saleGstLabel}
-                </td>
+                    {item.lines.length > 1 ? (
+                      <div className="mt-2 rounded-xl bg-slate-50 p-2">
+                        <LineList
+                          items={item.lines}
+                          renderValue={(line) => currency(line.purchaseTotal)}
+                        />
+                      </div>
+                    ) : null}
+                  </td>
 
-                <td className="px-4 py-3">
-                  {currency(item.saleTotalAmount)}
-                </td>
+                  <td className="px-4 py-4">
+                    {item.lines.length === 1 ? (
+                      <p className="font-medium text-slate-900">
+                        {currency(item.lines[0].saleRate)}
+                      </p>
+                    ) : (
+                      <div className="rounded-xl bg-slate-50 p-2">
+                        <LineList
+                          items={item.lines}
+                          renderValue={(line) => currency(line.saleRate)}
+                        />
+                      </div>
+                    )}
+                  </td>
 
-                <td className="px-4 py-3 font-semibold text-emerald-700">
-                  {currency(item.profitAmount)}
-                </td>
-              </tr>
-            ))}
+                  <td className="px-4 py-4">
+                    {item.lines.length === 1 ? (
+                      <p className="font-medium text-slate-900">
+                        {item.lines[0].saleGstPercent}%
+                      </p>
+                    ) : (
+                      <div className="rounded-xl bg-slate-50 p-2">
+                        <LineList
+                          items={item.lines}
+                          renderValue={(line) => `${line.saleGstPercent}%`}
+                        />
+                      </div>
+                    )}
+                  </td>
+
+                  <td className="px-4 py-4">
+                    <p className="font-semibold text-slate-900">
+                      {currency(item.saleTotalAmount)}
+                    </p>
+
+                    {item.lines.length > 1 ? (
+                      <div className="mt-2 rounded-xl bg-slate-50 p-2">
+                        <LineList
+                          items={item.lines}
+                          renderValue={(line) => currency(line.saleTotal)}
+                        />
+                      </div>
+                    ) : null}
+                  </td>
+
+                  <td className="px-4 py-4">
+                    <p
+                      className={[
+                        "font-semibold",
+                        isLoss ? "text-red-600" : "text-emerald-700",
+                      ].join(" ")}
+                    >
+                      {isLoss
+                        ? `Loss ${currency(Math.abs(item.profitAmount))}`
+                        : `Profit ${currency(item.profitAmount)}`}
+                    </p>
+
+                    {item.lines.length > 1 ? (
+                      <div className="mt-2 rounded-xl bg-slate-50 p-2">
+                        <LineList
+                          items={item.lines}
+                          renderValue={(line) => {
+                            const lineLoss = Number(line.profit || 0) < 0;
+
+                            return (
+                              <span className={lineLoss ? "text-red-600" : "text-emerald-700"}>
+                                {lineLoss
+                                  ? `Loss ${currency(Math.abs(line.profit))}`
+                                  : `Profit ${currency(line.profit)}`}
+                              </span>
+                            );
+                          }}
+                        />
+                      </div>
+                    ) : null}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </TableWrap>
