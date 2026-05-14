@@ -18,10 +18,10 @@ import { useAuth } from "../context/AuthContext";
 const navItems = [
   { to: "/", label: "Dashboard", icon: Home },
   { to: "/purchase-orders", label: "Purchase Orders", icon: ClipboardList },
-  { to: "/inventory", label: "Inventory", icon: Boxes },
   { to: "/sales", label: "Sales Orders", icon: ReceiptText },
+  { to: "/inventory", label: "Inventory", icon: Boxes },
   { to: "/tally-logs", label: "Tally Logs", icon: ShieldCheck },
-  { to: "/reports", label: "Reports", icon: FileBarChart },
+  // { to: "/reports", label: "Reports", icon: FileBarChart },
   { to: "/admin", label: "Users & Roles", icon: Users }
 ];
 

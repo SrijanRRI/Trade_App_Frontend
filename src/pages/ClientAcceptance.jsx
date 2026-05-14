@@ -88,6 +88,35 @@ export default function ClientAcceptance() {
   const ratingValue = Number(form.rating || 0);
   const feedbackMissing = !form.feedback.trim();
 
+  const groupedItems = Object.values(
+    (sale?.items || []).reduce((acc, item) => {
+      const key = item.itemName?.trim().toLowerCase();
+
+      if (!acc[key]) {
+        acc[key] = {
+          itemName: item.itemName,
+          quantity: 0,
+          totalAmount: 0,
+          totalRate: 0,
+          count: 0,
+        };
+      }
+
+      acc[key].quantity += Number(item.quantity || 0);
+      acc[key].totalAmount += Number(item.totalAmount || 0);
+      acc[key].totalRate += Number(item.saleRate || 0);
+      acc[key].count += 1;
+
+      return acc;
+    }, {})
+  ).map((item) => ({
+    ...item,
+    avgRate:
+      item.count > 0
+        ? item.totalRate / item.count
+        : 0,
+  }));
+
   return (
     <div className="min-h-screen bg-slate-50 p-4">
       <div className="mx-auto max-w-4xl space-y-5">
@@ -122,18 +151,22 @@ export default function ClientAcceptance() {
               <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
                 <p><span className="text-slate-500">Customer Email:</span> {sale.customerEmail}</p>
                 <p><span className="text-slate-500">Total:</span> {currency(sale.amount?.total)}</p>
-                <p><span className="text-slate-500">Items:</span> {sale.items?.length || 0}</p>
+                <p><span className="text-slate-500">Items:</span>  {groupedItems.length || 0} </p>
               </div>
             </Card>
 
             <Card>
               <h3 className="mb-4 font-semibold text-slate-900">Items</h3>
               <div className="space-y-3">
-                {sale.items?.map((item, index) => (
+                {groupedItems.map((item, index) => (
                   <div key={index} className="rounded-xl border border-slate-200 p-3">
                     <p className="font-semibold">{item.itemName}</p>
                     <p className="text-sm text-slate-500">
-                      Qty: {item.quantity} / Rate: {currency(item.saleRate)} / Total: {currency(item.totalAmount)}
+                      Qty: {item.quantity}
+                    </p>
+
+                    <p className="text-sm text-slate-500">
+                      Total: {currency(item.totalAmount)}
                     </p>
                   </div>
                 ))}

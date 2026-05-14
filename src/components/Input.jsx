@@ -1,5 +1,6 @@
 export default function Input({
   label,
+  required,
   error,
   className = "",
   as = "input",
@@ -12,6 +13,7 @@ export default function Input({
       {label ? (
         <span className="mb-1.5 block text-sm font-medium text-slate-700">
           {label}
+          {required && <span className="ml-1 text-red-500">*</span>}
         </span>
       ) : null}
 

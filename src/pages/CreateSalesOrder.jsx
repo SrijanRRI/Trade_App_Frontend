@@ -7,11 +7,12 @@ import { inventoryApi, saleApi } from "../api/api";
 import { currency } from "../utils/format";
 
 const emptyItem = {
-  groupKey: "",
+  inventoryId: "",
   quantity: 1,
   saleRate: 0,
   gstPercent: 0,
   discountPercent: 0,
+  description: "",
 };
 
 const createEmptyItem = () => ({ ...emptyItem });
@@ -25,29 +26,30 @@ const getItemName = (item) => {
   return item?.itemName || item?.itemDescription || "Unnamed Item";
 };
 
-const makeGroupKey = (item) => {
-  return getItemName(item).trim().toLowerCase();
-};
-
 const formatQty = (qty, unit) => {
   return `${toNum(qty)} ${unit || ""}`.trim();
 };
 
-const calculateSaleItemAmount = (item, allocationInfo = { allocations: [] }) => {
+const makeItemPoKey = (stock) => {
+  if (!stock) return "";
+  return `${getItemName(stock).trim().toLowerCase()}__${String(
+    stock.sourcePoNumber || "",
+  )
+    .trim()
+    .toLowerCase()}`;
+};
+
+const calculateSaleItemAmount = (item, inventoryItem) => {
   const qty = toNum(item.quantity);
   const saleRate = toNum(item.saleRate);
   const gstPercent = toNum(item.gstPercent);
   const discountPercent = toNum(item.discountPercent);
 
-  const purchaseBasic = allocationInfo.allocations.reduce((sum, allocation) => {
-    return sum + toNum(allocation.quantity) * toNum(allocation.stock.rate);
-  }, 0);
+  const purchaseRate = toNum(inventoryItem?.rate);
+  const purchaseGstPercent = toNum(inventoryItem?.gstPercent);
 
-  const purchaseGst = allocationInfo.allocations.reduce((sum, allocation) => {
-    const basic = toNum(allocation.quantity) * toNum(allocation.stock.rate);
-    return sum + (basic * toNum(allocation.stock.gstPercent)) / 100;
-  }, 0);
-
+  const purchaseBasic = qty * purchaseRate;
+  const purchaseGst = (purchaseBasic * purchaseGstPercent) / 100;
   const purchaseTotal = purchaseBasic + purchaseGst;
 
   const saleBasic = qty * saleRate;
@@ -68,6 +70,19 @@ const calculateSaleItemAmount = (item, allocationInfo = { allocations: [] }) => 
     profit: saleTotal - purchaseTotal,
   };
 };
+
+function ReadOnlyField({ label, value }) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium text-slate-700">
+        {label}
+      </label>
+      <div className="flex h-10 w-full items-center rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm font-medium text-slate-700">
+        {value || "-"}
+      </div>
+    </div>
+  );
+}
 
 export default function CreateSalesOrder() {
   const navigate = useNavigate();
@@ -90,148 +105,80 @@ export default function CreateSalesOrder() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const inventoryGroups = useMemo(() => {
-    const map = new Map();
-
-    inventory.forEach((stock) => {
-      const key = makeGroupKey(stock);
-
-      if (!map.has(key)) {
-        map.set(key, {
-          groupKey: key,
-          itemName: getItemName(stock),
-          itemDescription: stock.itemDescription || "",
-          hsnCode: stock.hsnCode || "",
-          unit: stock.unit || "",
-          items: [],
-          purchasedQuantity: 0,
-          availableQuantity: 0,
-          reservedQuantity: 0,
-          soldQuantity: 0,
-        });
-      }
-
-      const group = map.get(key);
-
-      group.items.push(stock);
-      group.purchasedQuantity += toNum(stock.purchasedQuantity);
-      group.availableQuantity += toNum(stock.availableQuantity);
-      group.reservedQuantity += toNum(stock.reservedQuantity);
-      group.soldQuantity += toNum(stock.soldQuantity);
-
-      if (!group.unit && stock.unit) {
-        group.unit = stock.unit;
-      }
-
-      if (!group.itemDescription && stock.itemDescription) {
-        group.itemDescription = stock.itemDescription;
-      }
-    });
-
-    return Array.from(map.values()).sort((a, b) =>
-      a.itemName.localeCompare(b.itemName),
-    );
+  const inventoryMap = useMemo(() => {
+    return new Map(inventory.map((item) => [item._id, item]));
   }, [inventory]);
 
-  const inventoryGroupMap = useMemo(() => {
-    return new Map(inventoryGroups.map((group) => [group.groupKey, group]));
-  }, [inventoryGroups]);
-
   const inventorySummary = useMemo(() => {
-    return inventoryGroups.reduce(
-      (acc, group) => {
-        acc.items += 1;
-        acc.free += toNum(group.availableQuantity);
-        acc.hold += toNum(group.reservedQuantity);
-        acc.sold += toNum(group.soldQuantity);
+    return inventory.reduce(
+      (acc, item) => {
+        acc.available += toNum(item.availableQuantity);
+        acc.reserved += toNum(item.reservedQuantity);
+        acc.sold += toNum(item.soldQuantity);
         return acc;
       },
       {
-        items: 0,
-        free: 0,
-        hold: 0,
+        available: 0,
+        reserved: 0,
         sold: 0,
       },
     );
-  }, [inventoryGroups]);
+  }, [inventory]);
 
-  const selectedQtyByGroupKey = useMemo(() => {
+  const selectedItemPoKeys = useMemo(() => {
     const map = new Map();
 
-    form.items.forEach((item) => {
-      if (!item.groupKey) return;
+    form.items.forEach((item, index) => {
+      const stock = inventoryMap.get(item.inventoryId);
+      const key = makeItemPoKey(stock);
 
-      map.set(
-        item.groupKey,
-        toNum(map.get(item.groupKey)) + toNum(item.quantity),
-      );
+      if (!key) return;
+
+      map.set(key, index);
     });
 
     return map;
-  }, [form.items]);
+  }, [form.items, inventoryMap]);
 
-  const getSelectedQtyExceptCurrentRow = (groupKey, currentIndex) => {
-    return form.items.reduce((total, row, rowIndex) => {
-      if (rowIndex === currentIndex) return total;
-      if (row.groupKey !== groupKey) return total;
-      return total + toNum(row.quantity);
-    }, 0);
+  const getItemPoSelectedByOtherRow = (stock, currentIndex) => {
+    const key = makeItemPoKey(stock);
+    if (!key) return false;
+
+    const selectedIndex = selectedItemPoKeys.get(key);
+
+    return selectedIndex !== undefined && selectedIndex !== currentIndex;
   };
 
-  const rowAllocationMap = useMemo(() => {
-    const usedByStockId = new Map();
-    const allocationByRow = new Map();
+  const getDropdownOptions = (currentIndex) => {
+    return inventory
+      .filter((stock) => {
+        const availableQty = toNum(stock.availableQuantity);
 
-    form.items.forEach((row, rowIndex) => {
-      const group = inventoryGroupMap.get(row.groupKey);
+        if (availableQty <= 0) return false;
 
-      if (!group) {
-        allocationByRow.set(rowIndex, {
-          allocations: [],
-          unallocated: toNum(row.quantity),
-        });
-        return;
-      }
-
-      let remainingQty = toNum(row.quantity);
-      const allocations = [];
-
-      group.items.forEach((stock) => {
-        if (remainingQty <= 0) return;
-
-        const alreadyUsed = toNum(usedByStockId.get(stock._id));
-        const freeInThisStock = Math.max(
-          toNum(stock.availableQuantity) - alreadyUsed,
-          0,
+        const alreadySelectedByOtherRow = getItemPoSelectedByOtherRow(
+          stock,
+          currentIndex,
         );
 
-        if (freeInThisStock <= 0) return;
+        return !alreadySelectedByOtherRow;
+      })
+      .sort((a, b) => {
+        const itemCompare = getItemName(a).localeCompare(getItemName(b));
 
-        const takeQty = Math.min(freeInThisStock, remainingQty);
+        if (itemCompare !== 0) return itemCompare;
 
-        allocations.push({
-          stock,
-          quantity: takeQty,
-        });
-
-        usedByStockId.set(stock._id, alreadyUsed + takeQty);
-        remainingQty -= takeQty;
+        return String(a.sourcePoNumber || "").localeCompare(
+          String(b.sourcePoNumber || ""),
+        );
       });
-
-      allocationByRow.set(rowIndex, {
-        allocations,
-        unallocated: remainingQty,
-      });
-    });
-
-    return allocationByRow;
-  }, [form.items, inventoryGroupMap]);
+  };
 
   const totals = useMemo(() => {
     return form.items.reduce(
-      (acc, item, index) => {
-        const allocationInfo = rowAllocationMap.get(index);
-        const amount = calculateSaleItemAmount(item, allocationInfo);
+      (acc, item) => {
+        const inventoryItem = inventoryMap.get(item.inventoryId);
+        const amount = calculateSaleItemAmount(item, inventoryItem);
 
         acc.purchaseTotal += amount.purchaseTotal;
         acc.saleGst += amount.saleGst;
@@ -247,7 +194,7 @@ export default function CreateSalesOrder() {
         profit: 0,
       },
     );
-  }, [form.items, rowAllocationMap]);
+  }, [form.items, inventoryMap]);
 
   useEffect(() => {
     const fetchInventory = async () => {
@@ -279,36 +226,28 @@ export default function CreateSalesOrder() {
     });
   };
 
-  const handleInventoryGroupChange = (index, groupKey) => {
-    const selectedGroup = inventoryGroupMap.get(groupKey);
+  const handleInventoryChange = (index, inventoryId) => {
+    const selectedStock = inventoryMap.get(inventoryId);
 
     setForm((prev) => {
       const items = [...prev.items];
 
-      if (!selectedGroup) {
+      if (!selectedStock) {
         items[index] = createEmptyItem();
         return { ...prev, items };
       }
 
-      const selectedByOtherRows = getSelectedQtyExceptCurrentRow(
-        groupKey,
-        index,
-      );
-
-      const availableForThisRow = Math.max(
-        toNum(selectedGroup.availableQuantity) - selectedByOtherRows,
-        0,
-      );
-
-      const firstStock = selectedGroup.items?.[0];
-
       items[index] = {
         ...items[index],
-        groupKey,
-        quantity: availableForThisRow > 0 ? 1 : 0,
-        saleRate: firstStock?.rate || 0,
-        gstPercent: firstStock?.gstPercent || 0,
+        inventoryId: selectedStock._id,
+        quantity: 1,
+        saleRate: selectedStock.rate || 0,
+        gstPercent: selectedStock.gstPercent || 0,
         discountPercent: 0,
+        description:
+          selectedStock.itemDescription ||
+          selectedStock.itemName ||
+          "",
       };
 
       return { ...prev, items };
@@ -317,21 +256,11 @@ export default function CreateSalesOrder() {
 
   const setMaxQuantity = (index) => {
     const row = form.items[index];
-    const group = inventoryGroupMap.get(row.groupKey);
+    const stock = inventoryMap.get(row.inventoryId);
 
-    if (!group) return;
+    if (!stock) return;
 
-    const selectedByOtherRows = getSelectedQtyExceptCurrentRow(
-      row.groupKey,
-      index,
-    );
-
-    const maxQty = Math.max(
-      toNum(group.availableQuantity) - selectedByOtherRows,
-      0,
-    );
-
-    updateItem(index, "quantity", maxQty);
+    updateItem(index, "quantity", toNum(stock.availableQuantity));
   };
 
   const addItem = () => {
@@ -353,38 +282,41 @@ export default function CreateSalesOrder() {
     if (!form.customerEmail.trim()) return "Customer email is required.";
     if (!form.items.length) return "At least one item is required.";
 
-    const qtyByGroupKey = new Map();
+    const selectedKeys = new Set();
 
     for (const [index, item] of form.items.entries()) {
-      const group = inventoryGroupMap.get(item.groupKey);
+      const stock = inventoryMap.get(item.inventoryId);
 
-      if (!group) {
+      if (!stock) {
         return `Please select item for row ${index + 1}.`;
       }
 
+      const itemPoKey = makeItemPoKey(stock);
+
+      if (selectedKeys.has(itemPoKey)) {
+        return `${getItemName(stock)} from PO ${stock.sourcePoNumber || "-"
+          } is already selected. Please update quantity in the existing row.`;
+      }
+
+      selectedKeys.add(itemPoKey);
+
       const qty = toNum(item.quantity);
+      const availableQty = toNum(stock.availableQuantity);
 
       if (qty <= 0) {
-        return `Quantity must be greater than 0 for ${group.itemName}.`;
+        return `Quantity must be greater than 0 for ${getItemName(stock)}.`;
+      }
+
+      if (qty > availableQty) {
+        return `${getItemName(stock)} from PO ${stock.sourcePoNumber || "-"
+          } has only ${formatQty(
+            availableQty,
+            stock.unit,
+          )} available to sell. You selected ${formatQty(qty, stock.unit)}.`;
       }
 
       if (toNum(item.saleRate) <= 0) {
-        return `Sale rate must be greater than 0 for ${group.itemName}.`;
-      }
-
-      qtyByGroupKey.set(
-        item.groupKey,
-        toNum(qtyByGroupKey.get(item.groupKey)) + qty,
-      );
-    }
-
-    for (const [groupKey, selectedQty] of qtyByGroupKey.entries()) {
-      const group = inventoryGroupMap.get(groupKey);
-      const freeQty = toNum(group?.availableQuantity);
-
-      if (selectedQty > freeQty) {
-        return `${group?.itemName || "Item"} has only ${freeQty} ${group?.unit || ""
-          } available to sell. You selected ${selectedQty}.`;
+        return `Sale rate must be greater than 0 for ${getItemName(stock)}.`;
       }
     }
 
@@ -402,27 +334,6 @@ export default function CreateSalesOrder() {
       return;
     }
 
-    const expandedItems = [];
-
-    form.items.forEach((item, index) => {
-      const allocationInfo = rowAllocationMap.get(index);
-
-      allocationInfo?.allocations?.forEach((allocation) => {
-        expandedItems.push({
-          inventoryId: allocation.stock._id,
-          quantity: toNum(allocation.quantity),
-          saleRate: toNum(item.saleRate),
-          gstPercent: toNum(item.gstPercent),
-          discountPercent: toNum(item.discountPercent),
-        });
-      });
-    });
-
-    if (!expandedItems.length) {
-      setError("No stock is available for selected items.");
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -435,7 +346,13 @@ export default function CreateSalesOrder() {
         billingAddress: form.billingAddress.trim(),
         shippingAddress: form.shippingAddress.trim(),
         remarks: form.remarks.trim(),
-        items: expandedItems,
+        items: form.items.map((item) => ({
+          inventoryId: item.inventoryId,
+          quantity: toNum(item.quantity),
+          saleRate: toNum(item.saleRate),
+          gstPercent: toNum(item.gstPercent),
+          discountPercent: toNum(item.discountPercent),
+        })),
       };
 
       const res = await saleApi.create(payload);
@@ -462,7 +379,7 @@ export default function CreateSalesOrder() {
           Create Manual Sales Order
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Create one sales order with one or more inventory items.
+          Select stock PO-wise, enter quantity and send the sales order to the customer.
         </p>
       </div>
 
@@ -543,8 +460,7 @@ export default function CreateSalesOrder() {
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Items</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Select item name once. If the same item exists in multiple stock
-              batches, it is automatically added together here.
+              Each dropdown option shows the item, PO number, purchase rate and available quantity.
             </p>
 
             {inventoryLoading ? (
@@ -555,18 +471,18 @@ export default function CreateSalesOrder() {
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 text-center text-xs sm:min-w-[360px]">
+            <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 text-center text-xs sm:min-w-[420px]">
               <div className="rounded-xl bg-white p-2">
                 <p className="text-slate-500">Available to Sell</p>
                 <p className="mt-1 font-bold text-emerald-700">
-                  {inventorySummary.free}
+                  {inventorySummary.available}
                 </p>
               </div>
 
               <div className="rounded-xl bg-white p-2">
                 <p className="text-slate-500">Reserved for Approval</p>
                 <p className="mt-1 font-bold text-amber-700">
-                  {inventorySummary.hold}
+                  {inventorySummary.reserved}
                 </p>
               </div>
 
@@ -586,41 +502,26 @@ export default function CreateSalesOrder() {
 
         <div className="space-y-4">
           {form.items.map((item, index) => {
-            const group = inventoryGroupMap.get(item.groupKey);
-            const allocationInfo = rowAllocationMap.get(index);
-            const amount = calculateSaleItemAmount(item, allocationInfo);
+            const stock = inventoryMap.get(item.inventoryId);
+            const amount = calculateSaleItemAmount(item, stock);
 
-            const selectedByOtherRows = item.groupKey
-              ? getSelectedQtyExceptCurrentRow(item.groupKey, index)
-              : 0;
+            const availableQty = toNum(stock?.availableQuantity);
+            const selectedQty = toNum(item.quantity);
+            const remainingAfterOrder = stock ? availableQty - selectedQty : 0;
+            const overSelected = stock && remainingAfterOrder < 0;
 
-            const totalSelectedForThisItem = item.groupKey
-              ? toNum(selectedQtyByGroupKey.get(item.groupKey))
-              : 0;
-
-            const freeStock = toNum(group?.availableQuantity);
-            const holdStock = toNum(group?.reservedQuantity);
-            const soldStock = toNum(group?.soldQuantity);
-            const purchasedStock = toNum(group?.purchasedQuantity);
-
-            const maxForThisRow = group
-              ? Math.max(freeStock - selectedByOtherRows, 0)
-              : 0;
-
-            const remainingAfterOrder = group
-              ? freeStock - totalSelectedForThisItem
-              : 0;
-
-            const overSelected = group && remainingAfterOrder < 0;
+            const dropdownOptions = getDropdownOptions(index);
 
             return (
               <div
                 key={index}
                 className={[
                   "rounded-2xl border p-4",
-                  overSelected
-                    ? "border-red-200 bg-red-50"
-                    : "border-slate-200 bg-white",
+                  !stock
+                    ? "border-slate-200 bg-slate-50"
+                    : overSelected
+                      ? "border-red-200 bg-red-50"
+                      : "border-slate-200 bg-white",
                 ].join(" ")}
               >
                 <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
@@ -629,12 +530,11 @@ export default function CreateSalesOrder() {
                       Item #{index + 1}
                     </p>
                     <p className="text-xs text-slate-500">
-                      Select item and enter quantity. Remaining stock will update
-                      immediately.
+                      Select a PO-wise stock row. After selecting, grey fields show purchase details.
                     </p>
                   </div>
 
-                  {group ? (
+                  {stock ? (
                     <div
                       className={[
                         "rounded-full px-3 py-1 text-xs font-semibold",
@@ -644,21 +544,26 @@ export default function CreateSalesOrder() {
                       ].join(" ")}
                     >
                       Available After This SO:{" "}
-                      {formatQty(remainingAfterOrder, group.unit)}
+                      {formatQty(remainingAfterOrder, stock.unit)}
                     </div>
-                  ) : null}
+                  ) : (
+                    <div className="rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">
+                      No item selected
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-4">
                   <div className="md:col-span-2">
                     <label className="mb-1 block text-sm font-medium text-slate-700">
-                      Item
+                      Item / PO / Purchase Price
+                      <span className="ml-1 text-red-500">*</span>
                     </label>
 
                     <select
-                      value={item.groupKey}
+                      value={item.inventoryId}
                       onChange={(e) =>
-                        handleInventoryGroupChange(index, e.target.value)
+                        handleInventoryChange(index, e.target.value)
                       }
                       disabled={inventoryLoading}
                       required
@@ -667,56 +572,44 @@ export default function CreateSalesOrder() {
                       <option value="">
                         {inventoryLoading
                           ? "Loading stock..."
-                          : "Select item"}
+                          : "Select item from PO"}
                       </option>
 
-                      {!inventoryLoading &&
-                        inventoryGroups.map((stockGroup) => {
-                          const selectedByOtherRowsForOption =
-                            getSelectedQtyExceptCurrentRow(
-                              stockGroup.groupKey,
-                              index,
-                            );
-
-                          const leftForThisRow =
-                            toNum(stockGroup.availableQuantity) -
-                            selectedByOtherRowsForOption;
-
-                          const disabled =
-                            leftForThisRow <= 0 &&
-                            item.groupKey !== stockGroup.groupKey;
-
-                          return (
-                            <option
-                              key={stockGroup.groupKey}
-                              value={stockGroup.groupKey}
-                              disabled={disabled}
-                            >
-                              {stockGroup.itemName} — Can Select Now:{" "}
-                              {formatQty(
-                                Math.max(leftForThisRow, 0),
-                                stockGroup.unit,
-                              )}
-                            </option>
-                          );
-                        })}
+                      {dropdownOptions.map((stockOption) => (
+                        <option key={stockOption._id} value={stockOption._id}>
+                          {getItemName(stockOption)} — PO:{" "}
+                          {stockOption.sourcePoNumber || "-"} — Purchase:{" "}
+                          {currency(stockOption.rate)} + GST{" "}
+                          {toNum(stockOption.gstPercent)}% — Can Select Now:{" "}
+                          {formatQty(
+                            stockOption.availableQuantity,
+                            stockOption.unit,
+                          )}
+                        </option>
+                      ))}
                     </select>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      Only available stock can be selected. Stock reserved for customer approval is blocked automatically.
+                      Same item from the same PO will not appear again after you select it.
                     </p>
                   </div>
 
-                  <Input
+                  <ReadOnlyField
                     label="Available to Sell"
-                    value={group ? formatQty(group.availableQuantity, group.unit) : ""}
-                    disabled
+                    value={
+                      stock
+                        ? formatQty(stock.availableQuantity, stock.unit)
+                        : ""
+                    }
                   />
 
-                  <Input
+                  <ReadOnlyField
                     label="Maximum Qty Allowed"
-                    value={group ? formatQty(maxForThisRow, group.unit) : ""}
-                    disabled
+                    value={
+                      stock
+                        ? formatQty(stock.availableQuantity, stock.unit)
+                        : ""
+                    }
                   />
 
                   <div>
@@ -731,7 +624,7 @@ export default function CreateSalesOrder() {
                       required
                     />
 
-                    {group ? (
+                    {stock ? (
                       <button
                         type="button"
                         onClick={() => setMaxQuantity(index)}
@@ -770,23 +663,33 @@ export default function CreateSalesOrder() {
                     }
                   />
 
-                  <Input
-                    label="Purchase Cost"
-                    value={group ? currency(amount.purchaseTotal) : ""}
-                    disabled
+                  <ReadOnlyField
+                    label="Purchase Rate"
+                    value={stock ? currency(stock.rate) : ""}
                   />
 
-                  <Input
+                  <ReadOnlyField
+                    label="Purchase GST %"
+                    value={stock ? `${toNum(stock.gstPercent)}%` : ""}
+                  />
+
+                  <ReadOnlyField
+                    label="Purchase Cost"
+                    value={stock ? currency(amount.purchaseTotal) : ""}
+                  />
+
+                  <ReadOnlyField
                     label="Sale Total"
-                    value={group ? currency(amount.saleTotal) : ""}
-                    disabled
+                    value={stock ? currency(amount.saleTotal) : ""}
                   />
 
                   <div className="md:col-span-2">
                     <Input
                       label="Description"
-                      value={group?.itemDescription || group?.itemName || ""}
-                      disabled
+                      value={item.description || ""}
+                      onChange={(e) =>
+                        updateItem(index, "description", e.target.value)
+                      }
                     />
                   </div>
 
@@ -802,32 +705,34 @@ export default function CreateSalesOrder() {
                   </div>
                 </div>
 
-                {group ? (
+                {stock ? (
                   <div className="mt-4 space-y-3">
                     <div className="grid gap-3 rounded-xl bg-slate-50 p-3 text-xs text-slate-700 md:grid-cols-5">
                       <p>
                         <span className="font-semibold">Total Purchased:</span>{" "}
-                        {formatQty(purchasedStock, group.unit)}
+                        {formatQty(stock.purchasedQuantity, stock.unit)}
                       </p>
 
                       <p>
                         <span className="font-semibold">Available Now:</span>{" "}
-                        {formatQty(freeStock, group.unit)}
+                        {formatQty(stock.availableQuantity, stock.unit)}
                       </p>
 
                       <p>
-                        <span className="font-semibold">Reserved for Approval:</span>{" "}
-                        {formatQty(holdStock, group.unit)}
+                        <span className="font-semibold">
+                          Reserved for Approval:
+                        </span>{" "}
+                        {formatQty(stock.reservedQuantity, stock.unit)}
                       </p>
 
                       <p>
                         <span className="font-semibold">Sold:</span>{" "}
-                        {formatQty(soldStock, group.unit)}
+                        {formatQty(stock.soldQuantity, stock.unit)}
                       </p>
 
                       <p>
                         <span className="font-semibold">Selected in this SO:</span>{" "}
-                        {formatQty(totalSelectedForThisItem, group.unit)}
+                        {formatQty(selectedQty, stock.unit)}
                       </p>
                     </div>
 
@@ -841,7 +746,7 @@ export default function CreateSalesOrder() {
                     >
                       <p>
                         <span className="font-semibold">Available After SO:</span>{" "}
-                        {formatQty(remainingAfterOrder, group.unit)}
+                        {formatQty(remainingAfterOrder, stock.unit)}
                       </p>
 
                       <p>
@@ -862,12 +767,15 @@ export default function CreateSalesOrder() {
 
                     {overSelected ? (
                       <p className="text-xs font-semibold text-red-600">
-                        You selected more than free stock. Please reduce the
-                        quantity.
+                        You selected more than available stock. Please reduce the quantity.
                       </p>
                     ) : null}
                   </div>
-                ) : null}
+                ) : (
+                  <div className="mt-4 rounded-xl bg-slate-100 p-3 text-xs text-slate-500">
+                    Select an item first. Purchase rate, PO number and stock details will appear here.
+                  </div>
+                )}
               </div>
             );
           })}
