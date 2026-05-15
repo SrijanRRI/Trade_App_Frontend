@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Badge from "../components/Badge";
 import Button from "../components/Button";
 import Card from "../components/Card";
@@ -9,6 +9,20 @@ import { saleApi, tallyApi } from "../api/api";
 import { currency, formatDate } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 
+const isAcceptedSale = (sale) => {
+  return (
+    sale?.clientAcceptanceStatus === "accepted" ||
+    sale?.saleStatus === "accepted"
+  );
+};
+
+const isRejectedSale = (sale) => {
+  return (
+    sale?.clientAcceptanceStatus === "rejected" ||
+    sale?.saleStatus === "rejected"
+  );
+};
+
 export default function SaleDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -16,13 +30,10 @@ export default function SaleDetail() {
   const { hasPermission } = useAuth();
 
   const canSyncSalesTally = hasPermission("tally.sales_sync");
-  // const canGenerateAcceptanceLink = hasPermission("sales.create");
 
   const [sale, setSale] = useState(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
-  // const [acceptanceLink, setAcceptanceLink] = useState("");
-  // const [generatingLink, setGeneratingLink] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -48,46 +59,18 @@ export default function SaleDetail() {
     try {
       const res = await tallyApi.syncSaleDummy(id);
       setMessage(res.message);
-      // setAcceptanceLink(res.data?.acceptanceLink || "");
       await load();
     } catch (err) {
       setMessage(err.message);
     }
   };
 
-  // const generateLink = async () => {
-  //   if (!canGenerateAcceptanceLink) {
-  //     setMessage("You do not have permission to generate client acceptance link.");
-  //     return;
-  //   }
-
-  //   setMessage("Generating acceptance link and sending email to customer...");
-  //   setGeneratingLink(true);
-
-  //   try {
-  //     const res = await saleApi.generateAcceptanceLink(id);
-  //     setAcceptanceLink(res.link);
-
-  //     setMessage(
-  //       res.emailSent
-  //         ? res.message
-  //         : `${res.message}${res.emailError ? ` Error: ${res.emailError}` : ""}`
-  //     );
-
-  //     await load();
-  //   } catch (err) {
-  //     setMessage(err.message);
-  //   } finally {
-  //     setGeneratingLink(false);
-  //   }
-  // };
-
   if (loading) return <Card>Loading sale...</Card>;
   if (!sale) return <Card>Sale not found.</Card>;
 
   const clientAcceptance = sale.clientAcceptance;
-  const isClientRejected = sale.clientAcceptanceStatus === "rejected";
-  const isClientAccepted = sale.clientAcceptanceStatus === "accepted";
+  const isClientRejected = isRejectedSale(sale);
+  const isClientAccepted = isAcceptedSale(sale);
 
   const groupedSaleItems = Object.values(
     (sale.items || []).reduce((acc, item) => {
@@ -98,14 +81,13 @@ export default function SaleDetail() {
       const qty = Number(item.quantity || 0);
 
       const purchaseBasic =
-        item.purchaseBasicAmount ??
-        Number(item.purchaseRate || 0) * qty;
+        item.purchaseBasicAmount ?? Number(item.purchaseRate || 0) * qty;
 
       const purchaseTotal =
         item.purchaseTotalAmount ??
         Number(item.purchaseRate || 0) *
-        qty *
-        (1 + Number(item.purchaseGstPercent || 0) / 100);
+          qty *
+          (1 + Number(item.purchaseGstPercent || 0) / 100);
 
       const purchaseGst =
         item.purchaseGstAmount ??
@@ -115,8 +97,10 @@ export default function SaleDetail() {
       const saleGst = Number(item.gstAmount || 0);
       const saleTotal = Number(item.totalAmount || 0);
 
-      const profit =
+      const expectedProfit =
         item.profitAmount ?? Number(saleTotal || 0) - Number(purchaseTotal || 0);
+
+      const realizedProfit = isClientAccepted ? Number(expectedProfit || 0) : 0;
 
       if (!acc[key]) {
         acc[key] = {
@@ -127,7 +111,7 @@ export default function SaleDetail() {
           quantity: 0,
           purchaseTotalAmount: 0,
           saleTotalAmount: 0,
-          profitAmount: 0,
+          realizedProfitAmount: 0,
 
           lines: [],
         };
@@ -136,7 +120,7 @@ export default function SaleDetail() {
       acc[key].quantity += qty;
       acc[key].purchaseTotalAmount += Number(purchaseTotal || 0);
       acc[key].saleTotalAmount += Number(saleTotal || 0);
-      acc[key].profitAmount += Number(profit || 0);
+      acc[key].realizedProfitAmount += Number(realizedProfit || 0);
 
       acc[key].lines.push({
         sourcePoNumber: item.sourcePoNumber || "-",
@@ -148,7 +132,8 @@ export default function SaleDetail() {
         saleRate: Number(item.saleRate || 0),
         saleGstPercent: Number(item.gstPercent || 0),
         saleTotal: Number(saleTotal || 0),
-        profit: Number(profit || 0),
+        expectedProfit: Number(expectedProfit || 0),
+        realizedProfit: Number(realizedProfit || 0),
       });
 
       return acc;
@@ -184,6 +169,41 @@ export default function SaleDetail() {
       ))}
     </div>
   );
+
+  const ProfitValue = ({ value }) => {
+    const amount = Number(value || 0);
+    const isLoss = amount < 0;
+
+    return (
+      <span className={isLoss ? "text-red-600" : "text-emerald-700"}>
+        {isLoss
+          ? `Loss ${currency(Math.abs(amount))}`
+          : `Profit ${currency(amount)}`}
+      </span>
+    );
+  };
+
+  const NotCountedProfit = () => {
+    if (isClientRejected) {
+      return (
+        <div>
+          <p className="font-semibold text-slate-500">{currency(0)}</p>
+          <p className="mt-1 text-xs text-red-600">
+            Not counted because rejected
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        <p className="font-semibold text-slate-500">Not counted</p>
+        <p className="mt-1 text-xs text-amber-600">
+          Waiting customer approval
+        </p>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-5">
@@ -224,31 +244,9 @@ export default function SaleDetail() {
             >
               Push Sales to Tally
             </Button>
-
-            {/* <Button
-              variant="secondary"
-              onClick={generateLink}
-              disabled={!canGenerateAcceptanceLink || generatingLink}
-              title={
-                !canGenerateAcceptanceLink
-                  ? "You do not have permission to generate client acceptance link"
-                  : generatingLink
-                    ? "Generating link and sending email..."
-                    : "Generate client acceptance link"
-              }
-             >
-              {generatingLink ? (
-                <>
-                  <Loader2 size={16} className="mr-2 animate-spin" />
-                  Sending Email...
-                </>
-              ) : (
-                "Generate Acceptance Link"
-              )}
-            </Button> */}
           </div>
 
-          {(!canSyncSalesTally) ? (
+          {!canSyncSalesTally ? (
             <p className="max-w-md text-left text-xs text-slate-500 xl:text-right">
               Some actions are disabled because your role does not have permission.
             </p>
@@ -257,20 +255,6 @@ export default function SaleDetail() {
       </div>
 
       {message ? <Card className="text-sm text-slate-700">{message}</Card> : null}
-
-      {/* {acceptanceLink ? (
-        <Card>
-          <p className="text-sm font-medium text-slate-700">Client Acceptance Link</p>
-          <a
-            href={acceptanceLink}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-2 block break-all text-sm font-semibold text-blue-600 hover:text-blue-700"
-          >
-            {acceptanceLink}
-          </a>
-        </Card>
-      ) : null} */}
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -285,12 +269,16 @@ export default function SaleDetail() {
 
         <Card>
           <p className="text-sm text-slate-500">Tally</p>
-          <div className="mt-2"><Badge value={sale.tallyStatus} /></div>
+          <div className="mt-2">
+            <Badge value={sale.tallyStatus} />
+          </div>
         </Card>
 
         <Card>
           <p className="text-sm text-slate-500">Client</p>
-          <div className="mt-2"><Badge value={sale.clientAcceptanceStatus} /></div>
+          <div className="mt-2">
+            <Badge value={sale.clientAcceptanceStatus} />
+          </div>
         </Card>
       </div>
 
@@ -302,7 +290,7 @@ export default function SaleDetail() {
                 Client Rejected This Delivery
               </p>
               <p className="mt-1 text-sm text-red-700">
-                The client has rejected the sale/delivery. Reason and rating are shown below.
+                The client has rejected the sale/delivery. Stock is released and profit is not counted.
               </p>
             </div>
 
@@ -339,7 +327,7 @@ export default function SaleDetail() {
                 Client Accepted This Delivery
               </p>
               <p className="mt-1 text-sm text-emerald-700">
-                The client has accepted the sale/delivery.
+                The client has accepted the sale/delivery. Profit is now counted.
               </p>
             </div>
 
@@ -381,170 +369,161 @@ export default function SaleDetail() {
               <th className="px-4 py-3">Sale Rate</th>
               <th className="px-4 py-3">Sale GST</th>
               <th className="px-4 py-3">Sale Total</th>
-              <th className="px-4 py-3">Profit</th>
+              <th className="px-4 py-3">Profit / Loss</th>
             </tr>
           </thead>
 
           <tbody className="divide-y divide-slate-100">
-            {groupedSaleItems.map((item, index) => {
-              const isLoss = Number(item.profitAmount || 0) < 0;
-
-              return (
-                <tr key={index} className="align-top hover:bg-slate-50">
-                  <td className="px-4 py-4">
-                    <p className="font-semibold text-slate-900">{item.itemName}</p>
-                    {item.itemDescription ? (
-                      <p className="mt-1 text-xs text-slate-500">{item.itemDescription}</p>
-                    ) : null}
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <PoBadgeList items={item.lines} />
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <p className="font-semibold text-slate-900">
-                      {item.quantity} {item.unit || ""}
+            {groupedSaleItems.map((item, index) => (
+              <tr key={index} className="align-top hover:bg-slate-50">
+                <td className="px-4 py-4">
+                  <p className="font-semibold text-slate-900">
+                    {item.itemName}
+                  </p>
+                  {item.itemDescription ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      {item.itemDescription}
                     </p>
+                  ) : null}
+                </td>
 
-                    {item.lines.length > 1 ? (
-                      <div className="mt-2 rounded-xl bg-slate-50 p-2">
-                        <LineList
-                          items={item.lines}
-                          renderValue={(line) => (
-                            <span>
-                              {line.quantity} {line.unit}
-                            </span>
-                          )}
-                        />
-                      </div>
-                    ) : null}
-                  </td>
+                <td className="px-4 py-4">
+                  <PoBadgeList items={item.lines} />
+                </td>
 
-                  <td className="px-4 py-4">
-                    {item.lines.length === 1 ? (
-                      <p className="font-medium text-slate-900">
-                        {currency(item.lines[0].purchaseRate)}
-                      </p>
-                    ) : (
-                      <div className="rounded-xl bg-slate-50 p-2">
-                        <LineList
-                          items={item.lines}
-                          renderValue={(line) => currency(line.purchaseRate)}
-                        />
-                      </div>
-                    )}
-                  </td>
+                <td className="px-4 py-4">
+                  <p className="font-semibold text-slate-900">
+                    {item.quantity} {item.unit || ""}
+                  </p>
 
-                  <td className="px-4 py-4">
-                    {item.lines.length === 1 ? (
-                      <p className="font-medium text-slate-900">
-                        {item.lines[0].purchaseGstPercent}%
-                      </p>
-                    ) : (
-                      <div className="rounded-xl bg-slate-50 p-2">
-                        <LineList
-                          items={item.lines}
-                          renderValue={(line) => `${line.purchaseGstPercent}%`}
-                        />
-                      </div>
-                    )}
-                  </td>
+                  {item.lines.length > 1 ? (
+                    <div className="mt-2 rounded-xl bg-slate-50 p-2">
+                      <LineList
+                        items={item.lines}
+                        renderValue={(line) => (
+                          <span>
+                            {line.quantity} {line.unit}
+                          </span>
+                        )}
+                      />
+                    </div>
+                  ) : null}
+                </td>
 
-                  <td className="px-4 py-4">
-                    <p className="font-semibold text-slate-900">
-                      {currency(item.purchaseTotalAmount)}
+                <td className="px-4 py-4">
+                  {item.lines.length === 1 ? (
+                    <p className="font-medium text-slate-900">
+                      {currency(item.lines[0].purchaseRate)}
                     </p>
+                  ) : (
+                    <div className="rounded-xl bg-slate-50 p-2">
+                      <LineList
+                        items={item.lines}
+                        renderValue={(line) => currency(line.purchaseRate)}
+                      />
+                    </div>
+                  )}
+                </td>
 
-                    {item.lines.length > 1 ? (
-                      <div className="mt-2 rounded-xl bg-slate-50 p-2">
-                        <LineList
-                          items={item.lines}
-                          renderValue={(line) => currency(line.purchaseTotal)}
-                        />
-                      </div>
-                    ) : null}
-                  </td>
-
-                  <td className="px-4 py-4">
-                    {item.lines.length === 1 ? (
-                      <p className="font-medium text-slate-900">
-                        {currency(item.lines[0].saleRate)}
-                      </p>
-                    ) : (
-                      <div className="rounded-xl bg-slate-50 p-2">
-                        <LineList
-                          items={item.lines}
-                          renderValue={(line) => currency(line.saleRate)}
-                        />
-                      </div>
-                    )}
-                  </td>
-
-                  <td className="px-4 py-4">
-                    {item.lines.length === 1 ? (
-                      <p className="font-medium text-slate-900">
-                        {item.lines[0].saleGstPercent}%
-                      </p>
-                    ) : (
-                      <div className="rounded-xl bg-slate-50 p-2">
-                        <LineList
-                          items={item.lines}
-                          renderValue={(line) => `${line.saleGstPercent}%`}
-                        />
-                      </div>
-                    )}
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <p className="font-semibold text-slate-900">
-                      {currency(item.saleTotalAmount)}
+                <td className="px-4 py-4">
+                  {item.lines.length === 1 ? (
+                    <p className="font-medium text-slate-900">
+                      {item.lines[0].purchaseGstPercent}%
                     </p>
+                  ) : (
+                    <div className="rounded-xl bg-slate-50 p-2">
+                      <LineList
+                        items={item.lines}
+                        renderValue={(line) => `${line.purchaseGstPercent}%`}
+                      />
+                    </div>
+                  )}
+                </td>
 
-                    {item.lines.length > 1 ? (
-                      <div className="mt-2 rounded-xl bg-slate-50 p-2">
-                        <LineList
-                          items={item.lines}
-                          renderValue={(line) => currency(line.saleTotal)}
-                        />
-                      </div>
-                    ) : null}
-                  </td>
+                <td className="px-4 py-4">
+                  <p className="font-semibold text-slate-900">
+                    {currency(item.purchaseTotalAmount)}
+                  </p>
 
-                  <td className="px-4 py-4">
-                    <p
-                      className={[
-                        "font-semibold",
-                        isLoss ? "text-red-600" : "text-emerald-700",
-                      ].join(" ")}
-                    >
-                      {isLoss
-                        ? `Loss ${currency(Math.abs(item.profitAmount))}`
-                        : `Profit ${currency(item.profitAmount)}`}
+                  {item.lines.length > 1 ? (
+                    <div className="mt-2 rounded-xl bg-slate-50 p-2">
+                      <LineList
+                        items={item.lines}
+                        renderValue={(line) => currency(line.purchaseTotal)}
+                      />
+                    </div>
+                  ) : null}
+                </td>
+
+                <td className="px-4 py-4">
+                  {item.lines.length === 1 ? (
+                    <p className="font-medium text-slate-900">
+                      {currency(item.lines[0].saleRate)}
                     </p>
+                  ) : (
+                    <div className="rounded-xl bg-slate-50 p-2">
+                      <LineList
+                        items={item.lines}
+                        renderValue={(line) => currency(line.saleRate)}
+                      />
+                    </div>
+                  )}
+                </td>
 
-                    {item.lines.length > 1 ? (
-                      <div className="mt-2 rounded-xl bg-slate-50 p-2">
-                        <LineList
-                          items={item.lines}
-                          renderValue={(line) => {
-                            const lineLoss = Number(line.profit || 0) < 0;
+                <td className="px-4 py-4">
+                  {item.lines.length === 1 ? (
+                    <p className="font-medium text-slate-900">
+                      {item.lines[0].saleGstPercent}%
+                    </p>
+                  ) : (
+                    <div className="rounded-xl bg-slate-50 p-2">
+                      <LineList
+                        items={item.lines}
+                        renderValue={(line) => `${line.saleGstPercent}%`}
+                      />
+                    </div>
+                  )}
+                </td>
 
-                            return (
-                              <span className={lineLoss ? "text-red-600" : "text-emerald-700"}>
-                                {lineLoss
-                                  ? `Loss ${currency(Math.abs(line.profit))}`
-                                  : `Profit ${currency(line.profit)}`}
-                              </span>
-                            );
-                          }}
-                        />
-                      </div>
-                    ) : null}
-                  </td>
-                </tr>
-              );
-            })}
+                <td className="px-4 py-4">
+                  <p className="font-semibold text-slate-900">
+                    {currency(item.saleTotalAmount)}
+                  </p>
+
+                  {item.lines.length > 1 ? (
+                    <div className="mt-2 rounded-xl bg-slate-50 p-2">
+                      <LineList
+                        items={item.lines}
+                        renderValue={(line) => currency(line.saleTotal)}
+                      />
+                    </div>
+                  ) : null}
+                </td>
+
+                <td className="px-4 py-4">
+                  {isClientAccepted ? (
+                    <>
+                      <p className="font-semibold">
+                        <ProfitValue value={item.realizedProfitAmount} />
+                      </p>
+
+                      {item.lines.length > 1 ? (
+                        <div className="mt-2 rounded-xl bg-slate-50 p-2">
+                          <LineList
+                            items={item.lines}
+                            renderValue={(line) => (
+                              <ProfitValue value={line.realizedProfit} />
+                            )}
+                          />
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <NotCountedProfit />
+                  )}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </TableWrap>

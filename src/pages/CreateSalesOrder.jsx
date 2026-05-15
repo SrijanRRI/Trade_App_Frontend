@@ -201,7 +201,7 @@ export default function CreateSalesOrder() {
       setInventoryLoading(true);
 
       try {
-        const res = await inventoryApi.list({ page: 1, pageSize: 500 });
+        const res = await inventoryApi.list({ page: 1, pageSize: 500 , sellableOnly: "true", });
         setInventory(Array.isArray(res?.data) ? res.data : []);
       } catch (err) {
         setError(err.message);
@@ -801,7 +801,7 @@ export default function CreateSalesOrder() {
           </p>
 
           <p>
-            <span className="text-slate-500">Expected Profit:</span>{" "}
+            <span className="text-slate-500">Expected Profit if Accepted:</span>{" "}
             <span className="font-semibold text-emerald-700">
               {currency(totals.profit)}
             </span>
