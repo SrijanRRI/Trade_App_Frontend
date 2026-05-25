@@ -8,6 +8,77 @@ import { saleApi } from "../api/api";
 import { currency, formatDate } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 
+const isAcceptedSale = (sale) => {
+  return (
+    sale?.clientAcceptanceStatus === "accepted" ||
+    sale?.saleStatus === "accepted"
+  );
+};
+
+const isRejectedSale = (sale) => {
+  return (
+    sale?.clientAcceptanceStatus === "rejected" ||
+    sale?.saleStatus === "rejected"
+  );
+};
+
+const getRealizedProfit = (sale) => {
+  if (!isAcceptedSale(sale)) return 0;
+
+  return Number(
+    sale?.amount?.realizedProfit ??
+      sale?.amount?.profit ??
+      0
+  );
+};
+
+function ProfitCell({ sale }) {
+  const accepted = isAcceptedSale(sale);
+  const rejected = isRejectedSale(sale);
+  const profit = getRealizedProfit(sale);
+  const isLoss = profit < 0;
+
+  if (accepted) {
+    return (
+      <div>
+        <p
+          className={[
+            "font-semibold",
+            isLoss ? "text-red-600" : "text-emerald-700",
+          ].join(" ")}
+        >
+          {isLoss
+            ? `Loss ${currency(Math.abs(profit))}`
+            : `Profit ${currency(profit)}`}
+        </p>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Counted after customer acceptance
+        </p>
+      </div>
+    );
+  }
+
+  if (rejected) {
+    return (
+      <div>
+        <p className="font-semibold text-slate-500">{currency(0)}</p>
+        <p className="mt-0.5 text-xs text-red-600">
+          Not counted because rejected
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="font-semibold text-slate-500">Not counted</p>
+      <p className="mt-0.5 text-xs text-amber-600">
+        Waiting customer approval
+      </p>
+    </div>
+  );
+}
+
 export default function Sales() {
   const { hasPermission } = useAuth();
 
@@ -67,7 +138,7 @@ export default function Sales() {
               <th className="px-4 py-3">Purchase Total</th>
               <th className="px-4 py-3">Sale GST</th>
               <th className="px-4 py-3">Sale Total</th>
-              <th className="px-4 py-3">Profit</th>
+              <th className="px-4 py-3">Profit / Loss</th>
               <th className="px-4 py-3">Sale Status</th>
               <th className="px-4 py-3">Tally</th>
               <th className="px-4 py-3">Client</th>
@@ -95,9 +166,7 @@ export default function Sales() {
                     {sale.saleNumber}
                   </td>
 
-                  <td className="px-4 py-3">
-                    {formatDate(sale.saleDate)}
-                  </td>
+                  <td className="px-4 py-3">{formatDate(sale.saleDate)}</td>
 
                   <td className="px-4 py-3">
                     <p className="font-medium text-slate-900">
@@ -120,8 +189,8 @@ export default function Sales() {
                     {currency(sale.amount?.total)}
                   </td>
 
-                  <td className="px-4 py-3 font-semibold text-emerald-700">
-                    {currency(sale.amount?.profit)}
+                  <td className="px-4 py-3">
+                    <ProfitCell sale={sale} />
                   </td>
 
                   <td className="px-4 py-3">

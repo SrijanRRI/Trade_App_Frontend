@@ -39,7 +39,11 @@ export default function Inventory() {
 
     setLoading(true);
     try {
-      const res = await inventoryApi.list({ page: 1, pageSize: 100 });
+      const res = await inventoryApi.list({
+        page: 1,
+        pageSize: 500,
+      });
+      
       setData(res.data || []);
     } catch (err) {
       setMessage(err.message);

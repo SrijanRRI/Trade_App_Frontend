@@ -7,7 +7,7 @@ import Card from "../components/Card";
 import Input from "../components/Input";
 import Modal from "../components/Modal";
 import TableWrap from "../components/TableWrap";
-import { purchaseOrderApi , tallyApi } from "../api/api";
+import { purchaseOrderApi, tallyApi } from "../api/api";
 import { currency, formatDate } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 
@@ -60,13 +60,39 @@ const calculatePoAmount = (items) => {
   return amount;
 };
 
+const createInitialTallyForm = (poData = null) => {
+  const voucherDate =
+    toDateInput(poData?.poDate) || new Date().toISOString().slice(0, 10);
+
+  return {
+    supplierInvoiceNumber: "",
+    supplierInvoiceDate: voucherDate,
+
+    roundOffRequired: false,
+    roundOffLedgerName: "Round Off",
+    roundOffDecimals: 0,
+
+    receiptNoteNo: "",
+    receiptDocNo: "",
+    receiptDate: voucherDate,
+    dispatchedThrough: "",
+    destination: "",
+    carrierName: "",
+    billLrNo: "",
+    billLrDate: voucherDate,
+    motorVehicleNo: "",
+  };
+};
+
 export default function PurchaseOrderDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
 
   const canEditPurchase = hasPermission("purchase.edit");
-  const canResendVendorApproval = hasPermission("purchase.resend_vendor_approval");
+  const canResendVendorApproval = hasPermission(
+    "purchase.resend_vendor_approval"
+  );
 
   const [po, setPo] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -77,17 +103,9 @@ export default function PurchaseOrderDetail() {
   const [editForm, setEditForm] = useState(null);
 
   const [tallyModalOpen, setTallyModalOpen] = useState(false);
-  const [tallyForm, setTallyForm] = useState({
-    receiptNoteNo: "",
-    receiptDocNo: "",
-    receiptDate: "",
-    dispatchedThrough: "",
-    destination: "",
-    carrierName: "",
-    billLrNo: "",
-    billLrDate: "",
-    motorVehicleNo: "",
-  });
+  const [tallyForm, setTallyForm] = useState(() =>
+    createInitialTallyForm(null)
+  );
 
   const load = async () => {
     setLoading(true);
@@ -106,9 +124,11 @@ export default function PurchaseOrderDetail() {
   }, [id]);
 
   const canEditThisPO = po?.inventoryStatus === "not_moved";
-  const canShowVendorActions = ["vendor_rejected", "pending_vendor_approval"].includes(
-    po?.status,
-  );
+
+  const canShowVendorActions = [
+    "vendor_rejected",
+    "pending_vendor_approval",
+  ].includes(po?.status);
 
   const openEditModal = () => {
     if (!po) return;
@@ -123,7 +143,6 @@ export default function PurchaseOrderDetail() {
       purchaseType: po.purchaseType || "",
       departmentName: po.departmentName || "",
       vendorName: po.vendorName || "",
-      // vendorCode: po.vendorCode || "",
       vendorLocation: po.vendorLocation || "",
       vendorEmail: po.vendorEmail || "",
       vendorPhone: po.vendorPhone || "",
@@ -132,7 +151,6 @@ export default function PurchaseOrderDetail() {
         _id: item._id,
         sourceItemId: item.sourceItemId || "",
         itemId: item.itemId || "",
-        // itemCode: item.itemCode || "",
         itemName: item.itemName || "",
         itemDescription: item.itemDescription || "",
         hsnCode: item.hsnCode || "",
@@ -149,6 +167,12 @@ export default function PurchaseOrderDetail() {
     });
 
     setEditOpen(true);
+  };
+
+  const openTallyModal = () => {
+    setMessage("");
+    setTallyForm(createInitialTallyForm(po));
+    setTallyModalOpen(true);
   };
 
   const updateEditForm = (key, value) => {
@@ -215,14 +239,30 @@ export default function PurchaseOrderDetail() {
     const voucherDate =
       toDateInput(po?.poDate) || new Date().toISOString().slice(0, 10);
 
+    const supplierInvoiceNumber = String(
+      tallyForm.supplierInvoiceNumber || ""
+    ).trim();
+
+    const supplierInvoiceDate = tallyForm.supplierInvoiceDate || voucherDate;
+
     return {
       date: voucherDate,
       voucherNumber: "",
-      referenceName: po?.poNumber || "",
-      // partyLedgerName: po?.vendorName || po?.vendorCode || "",
+
+      // Supplier invoice fields for Tally Purchase screen
+      supplierInvoiceNumber,
+      supplierInvoiceDate,
+
+      // Do not send PO number here. This avoids PO number saving as Supplier Invoice No.
+      referenceName: supplierInvoiceNumber,
+
+      partyLedgerName: po?.vendorName || po?.vendorCode || "",
       purchaseLedgerName: "PURCHASE SERVICE",
-      roundOffLedgerName: "Round Off",
-      roundOffDecimals: 0,
+
+      roundOffRequired: Boolean(tallyForm.roundOffRequired),
+      roundOffLedgerName: tallyForm.roundOffLedgerName || "Round Off",
+      roundOffDecimals: Number(tallyForm.roundOffDecimals || 0),
+
       receiptDetails: {
         receiptNoteNo: tallyForm.receiptNoteNo,
         receiptDate: tallyForm.receiptDate || voucherDate,
@@ -234,43 +274,68 @@ export default function PurchaseOrderDetail() {
         billOfLadingDate: tallyForm.billLrDate || voucherDate,
         motorVehicleNo: tallyForm.motorVehicleNo,
       },
-      items: (po?.items || []).map((item) => ({
-        stockItemName:
-          item.itemName || item.itemDescription || "ITEM",
-        description: item.itemDescription || item.techSpec || "",
-        qty: Number(item.acceptedQuantity || item.qty || 0),
-        rate: Number(item.rate || 0),
-        unit: item.unit || "NOS",
-        godownName: "Main Location",
-        batchName: "Primary Batch",
-      })),
+
+      items: (po?.items || []).map((item) => {
+        const itemDescription = String(
+          item.itemDescription ||
+            item.description ||
+            item.techSpec ||
+            item.hsnDescription ||
+            ""
+        ).trim();
+
+        return {
+          stockItemName: item.itemName || item.itemDescription || "ITEM",
+
+          description: itemDescription,
+          itemDescription,
+          hsnDescription: item.hsnDescription || itemDescription,
+          techSpec: item.techSpec || "",
+
+          hsnCode: item.hsnCode || "",
+
+          qty: Number(item.acceptedQuantity || item.qty || 0),
+          rate: Number(item.rate || 0),
+          unit: item.unit || "NOS",
+
+          godownName: "Main Location",
+          batchName: "Primary Batch",
+        };
+      }),
+
       taxes: buildTaxesFromPo(po),
     };
   };
 
   const moveToTally = async () => {
+    const supplierInvoiceNumber = String(
+      tallyForm.supplierInvoiceNumber || ""
+    ).trim();
+
+    if (!supplierInvoiceNumber) {
+      setMessage("Supplier Invoice No. is required before moving to Tally.");
+      return;
+    }
+
+    if (tallyForm.roundOffRequired && !tallyForm.roundOffLedgerName?.trim()) {
+      setMessage("Round Off Ledger is required when round off is enabled.");
+      return;
+    }
+
     setActionLoading(true);
     setMessage("");
 
     try {
       const payload = buildMoveToTallyPayload();
-      console.log(JSON.stringify(payload, null, 2));
+
+      console.log("PURCHASE TALLY PAYLOAD", JSON.stringify(payload, null, 2));
+
       const res = await tallyApi.moveToTally(payload);
 
       setMessage(res.message || "Purchase voucher moved to Tally successfully.");
       setTallyModalOpen(false);
 
-      setTallyForm({
-        receiptNoteNo: "",
-        receiptDocNo: "",
-        receiptDate: "",
-        dispatchedThrough: "",
-        destination: "",
-        carrierName: "",
-        billLrNo: "",
-        billLrDate: "",
-        motorVehicleNo: "",
-      });
+      setTallyForm(createInitialTallyForm(po));
 
       await load();
     } catch (err) {
@@ -322,7 +387,9 @@ export default function PurchaseOrderDetail() {
 
       setEditOpen(false);
       setEditForm(null);
-      setMessage("Purchase order updated successfully. You can now resend it to vendor.");
+      setMessage(
+        "Purchase order updated successfully. You can now resend it to vendor."
+      );
       await load();
     } catch (err) {
       setMessage(err.message);
@@ -373,8 +440,7 @@ export default function PurchaseOrderDetail() {
               {po.poNumber}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              {/* Vendor: {po.vendorName || "-"} / {po.vendorCode || "-"} */}
-              Vendor: {po.vendorName || "-"} 
+              Vendor: {po.vendorName || "-"}
             </p>
           </div>
         </div>
@@ -398,7 +464,7 @@ export default function PurchaseOrderDetail() {
 
           <Button
             variant="outline"
-            onClick={() => setTallyModalOpen(true)}
+            onClick={openTallyModal}
             disabled={actionLoading}
           >
             <MoveRight size={16} className="mr-2" />
@@ -422,7 +488,9 @@ export default function PurchaseOrderDetail() {
         </div>
       </div>
 
-      {message ? <Card className="text-sm text-slate-700">{message}</Card> : null}
+      {message ? (
+        <Card className="text-sm text-slate-700">{message}</Card>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -453,14 +521,18 @@ export default function PurchaseOrderDetail() {
       </div>
 
       <Card>
-        <h2 className="mb-4 text-lg font-semibold text-slate-900">PO Summary</h2>
+        <h2 className="mb-4 text-lg font-semibold text-slate-900">
+          PO Summary
+        </h2>
 
         <div className="grid gap-3 text-sm md:grid-cols-3">
           <p>
-            <span className="text-slate-500">Company:</span> {po.company || "-"}
+            <span className="text-slate-500">Company:</span>{" "}
+            {po.company || "-"}
           </p>
           <p>
-            <span className="text-slate-500">Division:</span> {po.division || "-"}
+            <span className="text-slate-500">Division:</span>{" "}
+            {po.division || "-"}
           </p>
           <p>
             <span className="text-slate-500">Total:</span>{" "}
@@ -475,7 +547,8 @@ export default function PurchaseOrderDetail() {
             {currency(po.amount?.totalTax)}
           </p>
           <p>
-            <span className="text-slate-500">Source:</span> {po.sourceType || "-"}
+            <span className="text-slate-500">Source:</span>{" "}
+            {po.sourceType || "-"}
           </p>
         </div>
       </Card>
@@ -557,7 +630,11 @@ export default function PurchaseOrderDetail() {
                   <p className="font-semibold text-slate-900">
                     {item.itemName || item.itemDescription}
                   </p>
-                  {/* <p className="text-xs text-slate-500">{item.itemCode || "-"}</p> */}
+                  {item.itemDescription ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      {item.itemDescription}
+                    </p>
+                  ) : null}
                 </td>
                 <td className="px-4 py-3">{item.hsnCode || "-"}</td>
                 <td className="px-4 py-3">
@@ -597,7 +674,10 @@ export default function PurchaseOrderDetail() {
             >
               Cancel
             </Button>
-            <Button onClick={saveEdit} disabled={actionLoading || !canEditPurchase}>
+            <Button
+              onClick={saveEdit}
+              disabled={actionLoading || !canEditPurchase}
+            >
               {actionLoading ? "Saving..." : "Save Changes"}
             </Button>
           </>
@@ -638,7 +718,9 @@ export default function PurchaseOrderDetail() {
                 <Input
                   label="Purchase Type"
                   value={editForm.purchaseType}
-                  onChange={(e) => updateEditForm("purchaseType", e.target.value)}
+                  onChange={(e) =>
+                    updateEditForm("purchaseType", e.target.value)
+                  }
                 />
 
                 <Input
@@ -658,15 +740,11 @@ export default function PurchaseOrderDetail() {
                 <Input
                   label="Vendor Name"
                   value={editForm.vendorName}
-                  onChange={(e) => updateEditForm("vendorName", e.target.value)}
+                  onChange={(e) =>
+                    updateEditForm("vendorName", e.target.value)
+                  }
                   required
                 />
-
-                {/* <Input
-                  label="Vendor Code"
-                  value={editForm.vendorCode}
-                  onChange={(e) => updateEditForm("vendorCode", e.target.value)}
-                /> */}
 
                 <Input
                   label="Vendor Location"
@@ -680,7 +758,9 @@ export default function PurchaseOrderDetail() {
                   label="Vendor Email"
                   type="email"
                   value={editForm.vendorEmail}
-                  onChange={(e) => updateEditForm("vendorEmail", e.target.value)}
+                  onChange={(e) =>
+                    updateEditForm("vendorEmail", e.target.value)
+                  }
                   required
                 />
 
@@ -692,7 +772,7 @@ export default function PurchaseOrderDetail() {
                   onChange={(e) =>
                     updateEditForm(
                       "vendorPhone",
-                      e.target.value.replace(/\D/g, "").slice(0, 10),
+                      e.target.value.replace(/\D/g, "").slice(0, 10)
                     )
                   }
                   required
@@ -740,14 +820,6 @@ export default function PurchaseOrderDetail() {
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                      {/* <Input
-                        label="Item Code"
-                        value={item.itemCode}
-                        onChange={(e) =>
-                          updateEditItem(index, "itemCode", e.target.value)
-                        }
-                      /> */}
-
                       <Input
                         label="Item Name"
                         value={item.itemName}
@@ -818,7 +890,7 @@ export default function PurchaseOrderDetail() {
                             updateEditItem(
                               index,
                               "itemDescription",
-                              e.target.value,
+                              e.target.value
                             )
                           }
                         />
@@ -855,6 +927,73 @@ export default function PurchaseOrderDetail() {
       >
         <div className="space-y-5">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="font-semibold text-slate-900">
+              Supplier Invoice & Round Off
+            </h3>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <Input
+                label="Supplier Invoice No."
+                value={tallyForm.supplierInvoiceNumber}
+                onChange={(e) =>
+                  updateTallyForm("supplierInvoiceNumber", e.target.value)
+                }
+                required
+              />
+
+              <Input
+                label="Supplier Invoice Date"
+                type="date"
+                value={tallyForm.supplierInvoiceDate}
+                onChange={(e) =>
+                  updateTallyForm("supplierInvoiceDate", e.target.value)
+                }
+              />
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Round Off Required?
+                </label>
+
+                <select
+                  value={tallyForm.roundOffRequired ? "yes" : "no"}
+                  onChange={(e) =>
+                    updateTallyForm(
+                      "roundOffRequired",
+                      e.target.value === "yes"
+                    )
+                  }
+                  className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                >
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </div>
+
+              {tallyForm.roundOffRequired ? (
+                <>
+                  <Input
+                    label="Round Off Ledger"
+                    value={tallyForm.roundOffLedgerName}
+                    onChange={(e) =>
+                      updateTallyForm("roundOffLedgerName", e.target.value)
+                    }
+                  />
+
+                  <Input
+                    label="Round Off Decimals"
+                    type="number"
+                    value={tallyForm.roundOffDecimals}
+                    onChange={(e) =>
+                      updateTallyForm("roundOffDecimals", e.target.value)
+                    }
+                  />
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <h3 className="font-semibold text-slate-900">Receipt Details</h3>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -878,9 +1017,7 @@ export default function PurchaseOrderDetail() {
                 label="Date"
                 type="date"
                 value={tallyForm.receiptDate}
-                onChange={(e) =>
-                  updateTallyForm("receiptDate", e.target.value)
-                }
+                onChange={(e) => updateTallyForm("receiptDate", e.target.value)}
               />
 
               <Input
@@ -894,34 +1031,26 @@ export default function PurchaseOrderDetail() {
               <Input
                 label="Destination"
                 value={tallyForm.destination}
-                onChange={(e) =>
-                  updateTallyForm("destination", e.target.value)
-                }
+                onChange={(e) => updateTallyForm("destination", e.target.value)}
               />
 
               <Input
                 label="Carrier Name / Agent"
                 value={tallyForm.carrierName}
-                onChange={(e) =>
-                  updateTallyForm("carrierName", e.target.value)
-                }
+                onChange={(e) => updateTallyForm("carrierName", e.target.value)}
               />
 
               <Input
                 label="Bill of Lading / LR-RR No."
                 value={tallyForm.billLrNo}
-                onChange={(e) =>
-                  updateTallyForm("billLrNo", e.target.value)
-                }
+                onChange={(e) => updateTallyForm("billLrNo", e.target.value)}
               />
 
               <Input
                 label="Bill of Lading / LR-RR Date"
                 type="date"
                 value={tallyForm.billLrDate}
-                onChange={(e) =>
-                  updateTallyForm("billLrDate", e.target.value)
-                }
+                onChange={(e) => updateTallyForm("billLrDate", e.target.value)}
               />
 
               <Input
@@ -931,6 +1060,52 @@ export default function PurchaseOrderDetail() {
                   updateTallyForm("motorVehicleNo", e.target.value)
                 }
               />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="font-semibold text-slate-900">
+              Items Going to Tally
+            </h3>
+
+            <div className="mt-4 overflow-x-auto">
+              <table className="min-w-[800px] w-full text-left text-sm">
+                <thead className="bg-white text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">Item</th>
+                    <th className="px-3 py-2">Description</th>
+                    <th className="px-3 py-2">Qty</th>
+                    <th className="px-3 py-2">Rate</th>
+                    <th className="px-3 py-2">Unit</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-200">
+                  {(po?.items || []).map((item, index) => (
+                    <tr key={item._id || index}>
+                      <td className="px-3 py-2 font-semibold text-slate-900">
+                        {item.itemName || item.itemDescription || "ITEM"}
+                      </td>
+
+                      <td className="px-3 py-2 text-slate-600">
+                        {item.itemDescription ||
+                          item.description ||
+                          item.techSpec ||
+                          item.hsnDescription ||
+                          "-"}
+                      </td>
+
+                      <td className="px-3 py-2">
+                        {Number(item.acceptedQuantity || item.qty || 0)}
+                      </td>
+
+                      <td className="px-3 py-2">{currency(item.rate)}</td>
+
+                      <td className="px-3 py-2">{item.unit || "NOS"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Button from "../components/Button";
 import Card from "../components/Card";
 import Input from "../components/Input";
-import { inventoryApi, saleApi } from "../api/api";
+import { inventoryApi, saleApi, tallyApi } from "../api/api";
 import { currency } from "../utils/format";
 
 const emptyItem = {
@@ -11,6 +11,7 @@ const emptyItem = {
   quantity: 1,
   saleRate: 0,
   gstPercent: 0,
+  selectedGstOption: "",
   discountPercent: 0,
   description: "",
 };
@@ -32,11 +33,53 @@ const formatQty = (qty, unit) => {
 
 const makeItemPoKey = (stock) => {
   if (!stock) return "";
+
   return `${getItemName(stock).trim().toLowerCase()}__${String(
-    stock.sourcePoNumber || "",
+    stock.sourcePoNumber || ""
   )
     .trim()
     .toLowerCase()}`;
+};
+
+const buildSaleGstOptionsFromStock = (stock) => {
+  const gst = toNum(stock?.gstPercent);
+
+  const options = [
+    {
+      value: "NO_GST",
+      label: "No GST",
+      gstPercent: 0,
+    },
+  ];
+
+  if (gst > 0) {
+    const half = gst / 2;
+
+    options.push({
+      value: "CGST_SGST",
+      label: `CGST ${half}% + SGST ${half}% = ${gst}%`,
+      gstPercent: gst,
+    });
+
+    options.push({
+      value: "IGST",
+      label: `IGST ${gst}%`,
+      gstPercent: gst,
+    });
+  }
+
+  return options;
+};
+
+const getDefaultSaleGstOption = (stock) => {
+  const options = buildSaleGstOptionsFromStock(stock);
+
+  return (
+    options.find((option) => option.value === "CGST_SGST") ||
+    options.find((option) => option.value === "IGST") ||
+    options.find((option) => option.value === "NO_GST") ||
+    options[0]
+  );
 };
 
 const calculateSaleItemAmount = (item, inventoryItem) => {
@@ -77,6 +120,7 @@ function ReadOnlyField({ label, value }) {
       <label className="mb-1 block text-sm font-medium text-slate-700">
         {label}
       </label>
+
       <div className="flex h-10 w-full items-center rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm font-medium text-slate-700">
         {value || "-"}
       </div>
@@ -89,6 +133,10 @@ export default function CreateSalesOrder() {
 
   const [inventory, setInventory] = useState([]);
   const [inventoryLoading, setInventoryLoading] = useState(false);
+
+  const [ledgers, setLedgers] = useState([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [selectedLedgerName, setSelectedLedgerName] = useState("");
 
   const [form, setForm] = useState({
     saleDate: new Date().toISOString().slice(0, 10),
@@ -121,7 +169,7 @@ export default function CreateSalesOrder() {
         available: 0,
         reserved: 0,
         sold: 0,
-      },
+      }
     );
   }, [inventory]);
 
@@ -158,7 +206,7 @@ export default function CreateSalesOrder() {
 
         const alreadySelectedByOtherRow = getItemPoSelectedByOtherRow(
           stock,
-          currentIndex,
+          currentIndex
         );
 
         return !alreadySelectedByOtherRow;
@@ -169,7 +217,7 @@ export default function CreateSalesOrder() {
         if (itemCompare !== 0) return itemCompare;
 
         return String(a.sourcePoNumber || "").localeCompare(
-          String(b.sourcePoNumber || ""),
+          String(b.sourcePoNumber || "")
         );
       });
   };
@@ -192,7 +240,7 @@ export default function CreateSalesOrder() {
         saleGst: 0,
         saleTotal: 0,
         profit: 0,
-      },
+      }
     );
   }, [form.items, inventoryMap]);
 
@@ -201,7 +249,7 @@ export default function CreateSalesOrder() {
       setInventoryLoading(true);
 
       try {
-        const res = await inventoryApi.list({ page: 1, pageSize: 500 });
+        const res = await inventoryApi.list({ page: 1, pageSize: 500 , sellableOnly: "true", });
         setInventory(Array.isArray(res?.data) ? res.data : []);
       } catch (err) {
         setError(err.message);
@@ -211,7 +259,22 @@ export default function CreateSalesOrder() {
       }
     };
 
+    const fetchLedgers = async () => {
+      setLedgerLoading(true);
+
+      try {
+        const res = await tallyApi.ledgers();
+        setLedgers(Array.isArray(res?.data) ? res.data : []);
+      } catch (err) {
+        console.error("Failed to fetch ledgers:", err.message);
+        setLedgers([]);
+      } finally {
+        setLedgerLoading(false);
+      }
+    };
+
     fetchInventory();
+    fetchLedgers();
   }, []);
 
   const update = (key, value) => {
@@ -226,6 +289,49 @@ export default function CreateSalesOrder() {
     });
   };
 
+  const handleLedgerChange = (e) => {
+    const ledgerName = e.target.value;
+    setSelectedLedgerName(ledgerName);
+
+    const selectedLedger = ledgers.find((ledger) => ledger.name === ledgerName);
+
+    if (!selectedLedger) {
+      setForm((prev) => ({
+        ...prev,
+        customerName: "",
+        customerEmail: "",
+        customerPhone: "",
+        customerGstin: "",
+        billingAddress: "",
+        shippingAddress: "",
+      }));
+      return;
+    }
+
+    const phone = String(selectedLedger.phone || selectedLedger.contact || "")
+      .replace(/\D/g, "")
+      .slice(0, 10);
+
+    const address = selectedLedger.address || "";
+
+    const gstin =
+      selectedLedger.gstin ||
+      selectedLedger.gstIn ||
+      selectedLedger.gstNumber ||
+      selectedLedger.gstRegistrationNumber ||
+      "";
+
+    setForm((prev) => ({
+      ...prev,
+      customerName: selectedLedger.mailingName || selectedLedger.name || "",
+      customerEmail: selectedLedger.email || "",
+      customerPhone: phone,
+      customerGstin: gstin,
+      billingAddress: address,
+      shippingAddress: address,
+    }));
+  };
+
   const handleInventoryChange = (index, inventoryId) => {
     const selectedStock = inventoryMap.get(inventoryId);
 
@@ -237,17 +343,38 @@ export default function CreateSalesOrder() {
         return { ...prev, items };
       }
 
+      const defaultGstOption = getDefaultSaleGstOption(selectedStock);
+
       items[index] = {
         ...items[index],
         inventoryId: selectedStock._id,
         quantity: 1,
         saleRate: selectedStock.rate || 0,
-        gstPercent: selectedStock.gstPercent || 0,
+        gstPercent: defaultGstOption.gstPercent,
+        selectedGstOption: defaultGstOption.value,
         discountPercent: 0,
-        description:
-          selectedStock.itemDescription ||
-          selectedStock.itemName ||
-          "",
+        description: selectedStock.itemDescription || selectedStock.itemName || "",
+      };
+
+      return { ...prev, items };
+    });
+  };
+
+  const handleSaleGstOptionChange = (index, value) => {
+    setForm((prev) => {
+      const items = [...prev.items];
+      const item = items[index];
+      const stock = inventoryMap.get(item.inventoryId);
+
+      const gstOptions = buildSaleGstOptionsFromStock(stock);
+
+      const selectedOption =
+        gstOptions.find((option) => option.value === value) || gstOptions[0];
+
+      items[index] = {
+        ...item,
+        selectedGstOption: selectedOption.value,
+        gstPercent: selectedOption.gstPercent,
       };
 
       return { ...prev, items };
@@ -278,6 +405,7 @@ export default function CreateSalesOrder() {
   };
 
   const validate = () => {
+    if (!selectedLedgerName) return "Customer ledger is required.";
     if (!form.customerName.trim()) return "Customer name is required.";
     if (!form.customerEmail.trim()) return "Customer email is required.";
     if (!form.items.length) return "At least one item is required.";
@@ -294,8 +422,9 @@ export default function CreateSalesOrder() {
       const itemPoKey = makeItemPoKey(stock);
 
       if (selectedKeys.has(itemPoKey)) {
-        return `${getItemName(stock)} from PO ${stock.sourcePoNumber || "-"
-          } is already selected. Please update quantity in the existing row.`;
+        return `${getItemName(stock)} from PO ${
+          stock.sourcePoNumber || "-"
+        } is already selected. Please update quantity in the existing row.`;
       }
 
       selectedKeys.add(itemPoKey);
@@ -308,11 +437,12 @@ export default function CreateSalesOrder() {
       }
 
       if (qty > availableQty) {
-        return `${getItemName(stock)} from PO ${stock.sourcePoNumber || "-"
-          } has only ${formatQty(
-            availableQty,
-            stock.unit,
-          )} available to sell. You selected ${formatQty(qty, stock.unit)}.`;
+        return `${getItemName(stock)} from PO ${
+          stock.sourcePoNumber || "-"
+        } has only ${formatQty(
+          availableQty,
+          stock.unit
+        )} available to sell. You selected ${formatQty(qty, stock.unit)}.`;
       }
 
       if (toNum(item.saleRate) <= 0) {
@@ -346,7 +476,7 @@ export default function CreateSalesOrder() {
         billingAddress: form.billingAddress.trim(),
         shippingAddress: form.shippingAddress.trim(),
         remarks: form.remarks.trim(),
-        items: form.items.map((item) => ({
+        items: form.items.map(({ selectedGstOption, description, ...item }) => ({
           inventoryId: item.inventoryId,
           quantity: toNum(item.quantity),
           saleRate: toNum(item.saleRate),
@@ -359,7 +489,7 @@ export default function CreateSalesOrder() {
 
       if (!res.emailSent) {
         setError(
-          `${res.message}${res.emailError ? ` Error: ${res.emailError}` : ""}`,
+          `${res.message}${res.emailError ? ` Error: ${res.emailError}` : ""}`
         );
         return;
       }
@@ -379,7 +509,8 @@ export default function CreateSalesOrder() {
           Create Manual Sales Order
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Select stock PO-wise, enter quantity and send the sales order to the customer.
+          Select stock PO-wise, enter quantity and send the sales order to the
+          customer.
         </p>
       </div>
 
@@ -397,12 +528,39 @@ export default function CreateSalesOrder() {
             required
           />
 
-          <Input
-            label="Customer Name"
-            value={form.customerName}
-            onChange={(e) => update("customerName", e.target.value)}
-            required
-          />
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Customer Ledger
+              <span className="ml-1 text-red-500">*</span>
+            </label>
+
+            <select
+              value={selectedLedgerName}
+              onChange={handleLedgerChange}
+              disabled={ledgerLoading}
+              required
+              className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100"
+            >
+              <option value="">
+                {ledgerLoading ? "Loading ledgers..." : "Select customer ledger"}
+              </option>
+
+              {!ledgerLoading &&
+                ledgers.map((ledger) => (
+                  <option key={ledger.name} value={ledger.name}>
+                    {ledger.name}
+                  </option>
+                ))}
+            </select>
+
+            {ledgerLoading ? (
+              <p className="mt-1 text-xs text-slate-500">
+                Fetching ledgers from Tally...
+              </p>
+            ) : null}
+          </div>
+
+          <Input label="Customer Name" value={form.customerName} disabled />
 
           <Input
             label="Customer Email"
@@ -420,7 +578,7 @@ export default function CreateSalesOrder() {
             onChange={(e) =>
               update(
                 "customerPhone",
-                e.target.value.replace(/\D/g, "").slice(0, 10),
+                e.target.value.replace(/\D/g, "").slice(0, 10)
               )
             }
           />
@@ -460,7 +618,8 @@ export default function CreateSalesOrder() {
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Items</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Each dropdown option shows the item, PO number, purchase rate and available quantity.
+              Each dropdown option shows the item, PO number, purchase rate and
+              available quantity.
             </p>
 
             {inventoryLoading ? (
@@ -511,6 +670,7 @@ export default function CreateSalesOrder() {
             const overSelected = stock && remainingAfterOrder < 0;
 
             const dropdownOptions = getDropdownOptions(index);
+            const saleGstOptions = buildSaleGstOptionsFromStock(stock);
 
             return (
               <div
@@ -520,8 +680,8 @@ export default function CreateSalesOrder() {
                   !stock
                     ? "border-slate-200 bg-slate-50"
                     : overSelected
-                      ? "border-red-200 bg-red-50"
-                      : "border-slate-200 bg-white",
+                    ? "border-red-200 bg-red-50"
+                    : "border-slate-200 bg-white",
                 ].join(" ")}
               >
                 <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
@@ -530,7 +690,8 @@ export default function CreateSalesOrder() {
                       Item #{index + 1}
                     </p>
                     <p className="text-xs text-slate-500">
-                      Select a PO-wise stock row. After selecting, grey fields show purchase details.
+                      Select a PO-wise stock row. After selecting, grey fields
+                      show purchase details.
                     </p>
                   </div>
 
@@ -582,14 +743,15 @@ export default function CreateSalesOrder() {
                           {toNum(stockOption.gstPercent)}% — Can Select Now:{" "}
                           {formatQty(
                             stockOption.availableQuantity,
-                            stockOption.unit,
+                            stockOption.unit
                           )}
                         </option>
                       ))}
                     </select>
 
                     <p className="mt-1 text-xs text-slate-500">
-                      Same item from the same PO will not appear again after you select it.
+                      Same item from the same PO will not appear again after you
+                      select it.
                     </p>
                   </div>
 
@@ -644,14 +806,30 @@ export default function CreateSalesOrder() {
                     required
                   />
 
-                  <Input
-                    label="Sale GST %"
-                    type="number"
-                    value={item.gstPercent}
-                    onChange={(e) =>
-                      updateItem(index, "gstPercent", e.target.value)
-                    }
-                  />
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Sale GST
+                    </label>
+
+                    <select
+                      value={item.selectedGstOption || ""}
+                      onChange={(e) =>
+                        handleSaleGstOptionChange(index, e.target.value)
+                      }
+                      disabled={!item.inventoryId}
+                      className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100"
+                    >
+                      <option value="">
+                        {item.inventoryId ? "Select GST" : "Select item first"}
+                      </option>
+
+                      {saleGstOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
                   <Input
                     label="Discount %"
@@ -730,7 +908,9 @@ export default function CreateSalesOrder() {
                       </p>
 
                       <p>
-                        <span className="font-semibold">Selected in this SO:</span>{" "}
+                        <span className="font-semibold">
+                          Selected in this SO:
+                        </span>{" "}
                         {formatQty(selectedQty, stock.unit)}
                       </p>
                     </div>
@@ -744,7 +924,9 @@ export default function CreateSalesOrder() {
                       ].join(" ")}
                     >
                       <p>
-                        <span className="font-semibold">Available After SO:</span>{" "}
+                        <span className="font-semibold">
+                          Available After SO:
+                        </span>{" "}
                         {formatQty(remainingAfterOrder, stock.unit)}
                       </p>
 
@@ -766,13 +948,15 @@ export default function CreateSalesOrder() {
 
                     {overSelected ? (
                       <p className="text-xs font-semibold text-red-600">
-                        You selected more than available stock. Please reduce the quantity.
+                        You selected more than available stock. Please reduce
+                        the quantity.
                       </p>
                     ) : null}
                   </div>
                 ) : (
                   <div className="mt-4 rounded-xl bg-slate-100 p-3 text-xs text-slate-500">
-                    Select an item first. Purchase rate, PO number and stock details will appear here.
+                    Select an item first. Purchase rate, PO number and stock
+                    details will appear here.
                   </div>
                 )}
               </div>
@@ -801,7 +985,7 @@ export default function CreateSalesOrder() {
           </p>
 
           <p>
-            <span className="text-slate-500">Expected Profit:</span>{" "}
+            <span className="text-slate-500">Expected Profit if Accepted:</span>{" "}
             <span className="font-semibold text-emerald-700">
               {currency(totals.profit)}
             </span>
@@ -818,7 +1002,10 @@ export default function CreateSalesOrder() {
           Cancel
         </Button>
 
-        <Button type="submit" disabled={loading || inventoryLoading}>
+        <Button
+          type="submit"
+          disabled={loading || inventoryLoading || ledgerLoading}
+        >
           {loading ? "Saving and Sending..." : "Save SO and Send to Customer"}
         </Button>
       </div>

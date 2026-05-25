@@ -61,7 +61,12 @@ export default function Dashboard() {
         po: po.total || 0,
         inventory: inventory.total || 0,
         sales: sales.total || 0,
-        profit: profit.data?.totalProfit || 0,
+        profit: Number(
+          profit.data?.totalRealizedProfit ??
+          profit.data?.realizedProfit ??
+          profit.data?.totalProfit ??
+          0
+        ),
       });
     } finally {
       setLoading(false);

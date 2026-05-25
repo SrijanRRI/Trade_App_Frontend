@@ -157,6 +157,12 @@ export const saleApi = {
     request(`/sales/${id}/send-acceptance-link`, {
       method: "POST",
     }),
+
+  updateTallyStatus: (id, payload) =>
+    request(`/sales/${id}/tally-status`, {
+      method: "PATCH",
+      body: payload,
+    }),
 };
 
 export const tallyApi = {
@@ -173,7 +179,11 @@ export const tallyApi = {
       method: "POST",
       body: payload,
     }),
-
+  createSalesVoucher: (payload) =>
+    request("/tally/sales", {
+      method: "POST",
+      body: payload,
+    }),
   syncPurchaseDummy: (poId) =>
     request(`/tally/purchase/${poId}/sync-dummy`, {
       method: "POST",
