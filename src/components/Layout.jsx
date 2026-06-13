@@ -6,6 +6,7 @@ import {
   Home,
   LogOut,
   Menu,
+  ReceiptIcon,
   ReceiptText,
   ShieldCheck,
   Users,
@@ -18,9 +19,11 @@ import { useAuth } from "../context/AuthContext";
 const navItems = [
   { to: "/", label: "Dashboard", icon: Home },
   { to: "/purchase-orders", label: "Purchase Orders", icon: ClipboardList },
+  // { to: "/create-Tally-bills", label: "Tally Bills", icon: ReceiptIcon },
   { to: "/sales", label: "Sales Orders", icon: ReceiptText },
   { to: "/inventory", label: "Inventory", icon: Boxes },
   { to: "/tally-logs", label: "Tally Logs", icon: ShieldCheck },
+  
   // { to: "/reports", label: "Reports", icon: FileBarChart },
   { to: "/admin", label: "Users & Roles", icon: Users }
 ];

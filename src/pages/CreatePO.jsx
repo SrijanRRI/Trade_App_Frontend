@@ -16,11 +16,17 @@ const emptyItem = {
   rate: 0,
   gstPercent: 0,
   taxDetails: [],
+
+  // UI only fields for description dropdown
+  descriptionOptions: [],
+  descriptionLoading: false,
+  descriptionLookupError: "",
 };
 
 const createEmptyItem = () => ({
   ...emptyItem,
   taxDetails: [],
+  descriptionOptions: [],
 });
 
 const toNum = (value) => {
@@ -224,6 +230,41 @@ const calculateItemAmount = (item) => {
   };
 };
 
+const normalizeItemDescriptionOptions = (res) => {
+  const data = res?.data ?? res;
+
+  const rawOptions = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.descriptions)
+    ? data.descriptions
+    : Array.isArray(data?.itemDescriptions)
+    ? data.itemDescriptions
+    : Array.isArray(data?.sizes)
+    ? data.sizes
+    : Array.isArray(data?.items)
+    ? data.items
+    : [];
+
+  const options = rawOptions
+    .map((option) => {
+      if (typeof option === "string") return option;
+
+      return (
+        option?.itemDescription ||
+        option?.description ||
+        option?.pipeSizeName ||
+        option?.sizeName ||
+        option?.name ||
+        option?.label ||
+        ""
+      );
+    })
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+
+  return [...new Set(options)];
+};
+
 export default function CreatePO() {
   const navigate = useNavigate();
 
@@ -330,39 +371,90 @@ export default function CreatePO() {
     }));
   };
 
-  const handleStockChange = (index, stockName) => {
+  const handleStockChange = async (index, stockName) => {
     const selectedStock = stocks.find((stock) => stock.name === stockName);
+
+    if (!selectedStock) {
+      setForm((prev) => {
+        const items = [...prev.items];
+        items[index] = createEmptyItem();
+        return { ...prev, items };
+      });
+      return;
+    }
+
+    const defaultGstOption = getDefaultGstOption(selectedStock);
+    const selectedItemName = selectedStock.name || "";
 
     setForm((prev) => {
       const items = [...prev.items];
 
-      if (!selectedStock) {
-        items[index] = createEmptyItem();
-        return { ...prev, items };
-      }
-
-      const defaultGstOption = getDefaultGstOption(selectedStock);
-
       items[index] = {
         ...items[index],
-        selectedStockName: selectedStock.name || "",
+        selectedStockName: selectedItemName,
         selectedGstOption: defaultGstOption.value,
 
-        itemName: selectedStock.name || "",
-        itemDescription:
-          selectedStock.description ||
-          selectedStock.hsnDescription ||
-          selectedStock.name ||
-          "",
+        itemName: selectedItemName,
+        itemDescription: "",
         hsnCode: selectedStock.hsnCode || "",
         unit: selectedStock.unit || "PCS",
 
         gstPercent: defaultGstOption.gstPercent,
         taxDetails: defaultGstOption.taxDetails,
+
+        descriptionOptions: [],
+        descriptionLoading: true,
+        descriptionLookupError: "",
       };
 
       return { ...prev, items };
     });
+
+    try {
+      const res = await purchaseOrderApi.lookupItemDescription(selectedItemName);
+      const descriptionOptions = normalizeItemDescriptionOptions(res);
+
+      setForm((prev) => {
+        const items = [...prev.items];
+        const currentItem = items[index];
+
+        if (!currentItem || currentItem.selectedStockName !== selectedItemName) {
+          return prev;
+        }
+
+        items[index] = {
+          ...currentItem,
+          descriptionOptions,
+          descriptionLoading: false,
+          descriptionLookupError: descriptionOptions.length
+            ? ""
+            : "No saved descriptions found. You can type manually.",
+        };
+
+        return { ...prev, items };
+      });
+    } catch (err) {
+      console.error("Failed to fetch item descriptions:", err);
+
+      setForm((prev) => {
+        const items = [...prev.items];
+        const currentItem = items[index];
+
+        if (!currentItem || currentItem.selectedStockName !== selectedItemName) {
+          return prev;
+        }
+
+        items[index] = {
+          ...currentItem,
+          descriptionOptions: [],
+          descriptionLoading: false,
+          descriptionLookupError:
+            "Could not load descriptions. You can type manually.",
+        };
+
+        return { ...prev, items };
+      });
+    }
   };
 
   const handleGstOptionChange = (index, value) => {
@@ -414,7 +506,14 @@ export default function CreatePO() {
         ...form,
         poDate: new Date(form.poDate),
         items: form.items.map(
-          ({ selectedStockName, selectedGstOption, ...item }) => {
+          ({
+            selectedStockName,
+            selectedGstOption,
+            descriptionOptions,
+            descriptionLoading,
+            descriptionLookupError,
+            ...item
+          }) => {
             const qty = toNum(item.qty);
             const rate = toNum(item.rate);
 
@@ -426,6 +525,7 @@ export default function CreatePO() {
 
             return {
               ...item,
+              itemDescription: String(item.itemDescription || "").trim(),
               // itemCode: undefined,
               qty,
               rate,
@@ -686,13 +786,47 @@ export default function CreatePO() {
                 </div>
 
                 <div className="mt-4">
-                  <Input
-                    label="Description"
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Description
+                  </label>
+
+                  <input
+                    list={`item-description-options-${index}`}
                     value={item.itemDescription}
                     onChange={(e) =>
                       updateItem(index, "itemDescription", e.target.value)
                     }
+                    disabled={!item.selectedStockName}
+                    required
+                    placeholder={
+                      !item.selectedStockName
+                        ? "Select stock item first"
+                        : item.descriptionLoading
+                        ? "Loading descriptions..."
+                        : "Select description or type manually"
+                    }
+                    className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100"
                   />
+
+                  <datalist id={`item-description-options-${index}`}>
+                    {(item.descriptionOptions || []).map((description) => (
+                      <option key={description} value={description} />
+                    ))}
+                  </datalist>
+
+                  {item.descriptionLoading ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Fetching descriptions for selected item...
+                    </p>
+                  ) : item.descriptionLookupError ? (
+                    <p className="mt-1 text-xs text-amber-600">
+                      {item.descriptionLookupError}
+                    </p>
+                  ) : item.descriptionOptions?.length ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Select from dropdown or type your own description.
+                    </p>
+                  ) : null}
                 </div>
 
                 {Array.isArray(item.taxDetails) && item.taxDetails.length > 0 ? (

@@ -16,6 +16,7 @@ import Reports from "./pages/Reports";
 import Admin from "./pages/Admin";
 import VendorPOApproval from "./pages/VendorPOApproval";
 import CreateSalesOrder from "./pages/CreateSalesOrder";
+import CreateBills from "./pages/CreateBills";
 
 function ProtectedRoute({ children }) {
   const { token, loading } = useAuth();
@@ -81,6 +82,7 @@ export default function App() {
         <Route path="tally-logs" element={<TallyLogs />} />
         <Route path="reports" element={<Reports />} />
         <Route path="admin" element={<Admin />} />
+        <Route path="create-Tally-bills" element={<CreateBills />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -122,6 +122,16 @@ export const purchaseOrderApi = {
     request(`/purchase-orders/${id}/resend-vendor-approval`, {
       method: "POST",
     }),
+
+  lookupItemDescription: (itemName) => {
+    const query = new URLSearchParams({
+      itemName: itemName || "",
+    }).toString();
+
+    return request(`/purchase-orders/lookup/item-description?${query}`);
+  },
+
+
 };
 
 export const inventoryApi = {
